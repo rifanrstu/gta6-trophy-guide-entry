@@ -1,5 +1,8 @@
 /* GTA VI Trophy Atlas — night theme, one coral accent, medal swatches as data marks.
-   No webfonts, no images, no network: system serif display + system sans body. */
+   No webfonts, no images, no network: system serif display + system sans body.
+   Revision in this build: styles for the guide pane's timing line, confidence
+   badge and numbered step breakdown, the roadmap's "watch out" callout, and
+   the planner's first-step line — all in the same one-accent night theme. */
 :root {
   --bg: #0f1218;
   --surface: #171c24;
@@ -46,6 +49,7 @@ h1 { margin: 0; font-size: 40px; line-height: 1.05; }
 .bar { height: 10px; background: var(--surface2); border-radius: 6px; overflow: hidden; margin: 10px 0 8px; }
 #bar-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 6px; transition: width .25s ease; }
 .muted { color: var(--muted); }
+#counter-line { margin: 2px 0 0; font-size: 13px; }
 .nextline { margin: 8px 0 0; font-size: 13.5px; border-top: 1px dashed var(--border); padding-top: 8px; }
 
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 28px 0; }
@@ -93,6 +97,7 @@ main { padding: 18px 28px 30px; }
 .badge.grade { color: var(--text); }
 .badge.missable { border-color: var(--accent); color: var(--danger); }
 .badge.counter { text-transform: none; letter-spacing: 0; }
+.badge.confidence { text-transform: none; letter-spacing: 0; color: var(--accent); border-color: var(--accent); }
 
 .detail {
   background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
@@ -104,6 +109,14 @@ main { padding: 18px 28px 30px; }
 .detail p { margin: 6px 0; }
 .detail ul { margin: 6px 0; padding-left: 18px; }
 .detail .warn { border: 1px solid var(--accent); border-radius: 6px; padding: 10px 12px; background: var(--surface2); }
+.detail .timing {
+  border-left: 4px solid var(--accent); background: var(--surface2);
+  border-radius: 0 6px 6px 0; padding: 8px 12px; margin: 10px 0 4px; font-weight: 600;
+}
+.confidence-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13.5px; }
+.steps { margin: 6px 0 4px; padding-left: 22px; }
+.steps li { margin: 6px 0; }
+.steps li::marker { color: var(--accent); font-weight: 700; }
 .counter-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 .counter-box button { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-weight: 700; }
 .counter-box input { width: 84px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
@@ -120,11 +133,22 @@ main { padding: 18px 28px 30px; }
   padding: 16px 18px; margin: 12px 0; max-width: 900px;
 }
 .step h3, .miss-card h3 { margin: 0 0 6px; font-size: 19px; }
+.miss-card h4 { margin: 12px 0 4px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.miss-card .timing {
+  border-left: 4px solid var(--accent); background: var(--surface2);
+  border-radius: 0 6px 6px 0; padding: 8px 12px; font-weight: 600;
+}
 .step .when { color: var(--accent); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; }
+.step .watch {
+  border: 1px solid var(--accent); border-radius: 6px; padding: 9px 12px;
+  background: var(--surface2); margin: 10px 0 4px;
+}
+.step .watch strong { color: var(--danger); }
 .step-progress { font-weight: 600; color: var(--accent); margin: 10px 0 4px; }
 .rules { max-width: 80ch; }
 .planner-list { max-width: 900px; padding-left: 22px; }
 .planner-list li { margin: 10px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.planner-first-step { display: block; margin-top: 6px; color: var(--muted); font-size: 13.5px; }
 .save-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 .save-actions button, .import-btn {
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 14px; font-weight: 600;

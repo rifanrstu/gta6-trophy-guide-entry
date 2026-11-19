@@ -1,7 +1,29 @@
 // GTA VI Trophy Atlas — rendering: scorecard, checklist rows, the guide pane,
 // roadmap, missables, planner and the sources index. All text comes from
 // data/trophies.json or js/data.js; this file only lays it out.
-import { GRADE_ORDER, KIND_LABELS, ROADMAP, displayDescription, displayName, isMasked, plannerReason, stageTrophies, stepProgress } from './data.js';
+// Revision in this build: the guide pane renders each trophy's step breakdown
+// as a numbered list with its timing line and confidence badge, the scorecard
+// totals the counters still open, roadmap cards carry a "watch out" line and
+// their remaining counter load, and every planner row shows the first step of
+// the trophy it queues — so a screenshot of any view shows a plan, not a list.
+import {
+  GRADE_ORDER,
+  KIND_LABELS,
+  ROADMAP,
+  completionPct,
+  confidenceFor,
+  displayDescription,
+  displayName,
+  isMasked,
+  plannerFirstStep,
+  plannerReason,
+  remainingCounters,
+  stageTrophies,
+  stepCounterLoad,
+  stepProgress,
+  stepsFor,
+  timingFor,
+} from './data.js';
 import { counterOf, isEarned } from './store.js';
 
 function el(tag, className, text) {
@@ -26,6 +48,12 @@ export function renderScorecard(doc, state, els) {
     return `${grade[0].toUpperCase()}${grade.slice(1)} ${got}/${all.length}`;
   };
   els.gradeLine.textContent = ['platinum', 'gold', 'silver', 'bronze'].map(byGrade).join(' · ');
+  if (els.counterLine) {
+    const left = remainingCounters(doc, state, isEarned, counterOf);
+    els.counterLine.textContent = earnedCount === trophies.length
+      ? 'All 55 earned — platinum unlocked.'
+      : `${completionPct(doc, state, isEarned)}% of the list · counters still open: ${left.unitsLeft} counted things across ${left.trophiesOpen} trophies`;
+  }
 }
 
 export function renderChecklist(doc, state, ui, els, onSelect, onToggle) {
@@ -99,9 +127,18 @@ export function renderDetail(doc, state, els, handlers) {
   }
   pane.append(el('h3', '', 'Guide — our own words, sources cited'));
   if (masked) {
-    pane.append(el('p', '', 'The guide for this story trophy is hidden by the spoiler shield until the trophy is earned. Its facts and sources appear here the moment you tick it off.'));
+    pane.append(el('p', '', 'The guide for this story trophy is hidden by the spoiler shield until the trophy is earned. Its facts, steps and sources appear here the moment you tick it off.'));
   } else {
     pane.append(el('p', '', trophy.guide));
+    pane.append(el('p', 'timing', `When: ${timingFor(trophy)}`));
+    const confidence = el('p', 'confidence-line');
+    confidence.append(document.createTextNode('How sure is this guide? '), badge(confidenceFor(trophy), 'confidence'));
+    pane.append(confidence);
+    const stepList = stepsFor(trophy);
+    pane.append(el('h3', '', `Do it in steps (${stepList.length})`));
+    const steps = el('ol', 'steps');
+    for (const step of stepsFor(trophy)) steps.append(el('li', '', step));
+    pane.append(steps);
     if (trophy.target) pane.append(renderCounter(trophy, state, handlers));
     pane.append(el('h3', '', 'Sources beside this guide'));
     const sources = el('ul');
@@ -158,6 +195,11 @@ export function renderRoadmap(doc, state, els) {
   for (const step of ROADMAP) {
     const card = el('article', 'step');
     card.append(el('p', 'when', step.when), el('h3', '', step.title), el('p', '', step.body));
+    if (step.watch) {
+      const watch = el('p', 'watch');
+      watch.append(el('strong', '', 'Watch out: '), document.createTextNode(step.watch));
+      card.append(watch);
+    }
     const progress = stepProgress(doc.trophies, state, isEarned, step.stage);
     if (progress.total) {
       const bar = el('div', 'counter-bar');
@@ -166,6 +208,8 @@ export function renderRoadmap(doc, state, els) {
       bar.append(fill);
       card.append(el('p', 'step-progress', `Your progress in this step: ${progress.earned} of ${progress.total} trophies earned (${progress.pct}%)`), bar);
     }
+    const load = stepCounterLoad(doc.trophies, state, isEarned, counterOf, step.stage);
+    if (load > 0) card.append(el('p', 'muted', `Counter load left in this step: ${load} counted things across its unearned counter trophies.`));
     const names = stageTrophies(doc.trophies, step.stage).map((t) => t.name);
     if (names.length) card.append(el('p', 'muted', `Trophies in this step (${names.length}): ${names.join(' · ')}`));
     host.append(card);
@@ -181,8 +225,12 @@ export function renderMissables(doc, els) {
       el('h3', '', `${trophy.name} — ${trophy.grade}`),
       el('p', 'official', `Official description: “${trophy.description}”`),
       el('p', '', trophy.missableNote ?? ''),
+      el('p', 'timing', `When: ${timingFor(trophy)}`),
       el('p', '', trophy.guide),
     );
+    const steps = el('ol', 'steps');
+    for (const step of stepsFor(trophy)) steps.append(el('li', '', step));
+    card.append(el('h4', '', 'Do it in steps'), steps);
     const sources = el('p', 'muted', `Sources: ${(trophy.sources ?? []).map((s) => s.label).join('; ')}`);
     card.append(sources);
     host.append(card);
@@ -190,7 +238,7 @@ export function renderMissables(doc, els) {
   const verdict = el('article', 'miss-card');
   verdict.append(
     el('h3', '', 'Everything else: not missable, by the descriptions'),
-    el('p', '', 'No other trophy in the official list is flagged missable here. Story trophies unlock on completion, counters and collectibles stay open in free roam after the credits, and the launch guides this atlas cites report exactly one potentially missable trophy. A guide that flags half the list as missable is guessing — this page would rather flag one trophy well.'),
+    el('p', '', 'No other trophy in the official list is flagged missable here. Story trophies unlock on completion, counters and collectibles stay open in free roam after the credits, and the launch guides this atlas cites report exactly one potentially missable trophy. A guide that flags half the list as missable is guessing — this page would rather flag one trophy well, with its steps and its window in plain sight.'),
   );
   host.append(verdict);
 }
@@ -211,6 +259,7 @@ export function renderPlanner(doc, state, els) {
       badge(trophy.grade, 'grade'),
       badge(`Step ${trophy.stage ?? '—'}`),
       document.createTextNode(` — ${plannerReason(trophy, state, counterOf)}`),
+      el('span', 'planner-first-step', `First step: ${plannerFirstStep(trophy)}`),
     );
     host.append(item);
   });

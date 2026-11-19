@@ -1,7 +1,11 @@
 // GTA VI Trophy Atlas — boot, tabs, filters and wiring.
-// Deep links work too: ?view=roadmap|missables|planner|save, ?kind=missable,
+// Deep links work too: ?view=roadmap|missables|planner|save, ?kind=missable|counters,
 // ?select=<trophy name>, ?spoiler=off, ?demo=1 (a 13-of-55 demo progress).
-import { loadTrophyDoc, matchesKind, plannerOrder, shareSummary } from './data.js';
+// Revision in this build: the scorecard gains a counters line (percent complete
+// and what the open counters still ask for), the kind chips gain a Counters
+// filter, and pressing "/" anywhere jumps to the search box, because a tracker
+// you open 200 times should be keyboard-fast by the end of the run.
+import { loadTrophyDoc, matchesKind, plannerOrder, shareSummary, stepsFor } from './data.js';
 import { demoState, exportPayload, importPayload, isEarned, loadState, saveState, setCounter, setEarned } from './store.js';
 import { renderChecklist, renderDetail, renderMissables, renderPlanner, renderRoadmap, renderScorecard, renderSourcesIndex } from './views.js';
 
@@ -29,7 +33,8 @@ const ui = {
     if (this.grade !== 'all' && trophy.grade !== this.grade) return false;
     if (!matchesKind(trophy, this.kind)) return false;
     if (this.query) {
-      const hay = `${trophy.name} ${trophy.description} ${trophy.kind} ${trophy.guide}`.toLowerCase();
+      const stepsText = stepsFor(trophy).join(' ');
+      const hay = `${trophy.name} ${trophy.description} ${trophy.kind} ${trophy.guide} ${stepsText}`.toLowerCase();
       if (!hay.includes(this.query.toLowerCase())) return false;
     }
     return true;
@@ -40,6 +45,7 @@ const els = {
   earnedCount: document.getElementById('earned-count'),
   barFill: document.getElementById('bar-fill'),
   gradeLine: document.getElementById('grade-line'),
+  counterLine: document.getElementById('counter-line'),
   nextLine: document.getElementById('next-line'),
   list: document.getElementById('trophy-list'),
   detail: document.getElementById('detail'),
@@ -53,11 +59,13 @@ const els = {
   plannerHelpers: { plannerOrder },
 };
 
+const counterOf = (s, t) => Number(s.counters[t.name] ?? 0) || 0;
+
 function refresh() {
   renderScorecard(doc, state, els);
-  const next = plannerOrder(doc.trophies, state, isEarned, (s, t) => Number(s.counters[t.name] ?? 0) || 0)[0];
+  const next = plannerOrder(doc.trophies, state, isEarned, counterOf)[0];
   els.nextLine.textContent = next
-    ? `Next up: ${next.name} — ${next.missable ? 'missable, window first' : next.kind === 'story' ? 'story, automatic on completion' : 'see its guide and sources in the checklist'}.`
+    ? `Next up: ${next.name} — ${next.missable ? 'missable, window first' : next.kind === 'story' ? 'story, automatic on completion' : 'its first step is in the planner'}.`
     : 'Next up: nothing — all 55 earned. Platinum unlocked.';
   renderChecklist(doc, state, ui, els, selectTrophy, toggleEarned);
   renderDetail(doc, state, els, detailHandlers);
@@ -112,9 +120,18 @@ for (const chip of document.querySelectorAll('#kind-chips .chip')) {
     refresh();
   });
 }
-document.getElementById('search').addEventListener('input', (event) => {
+const searchBox = document.getElementById('search');
+searchBox.addEventListener('input', (event) => {
   ui.query = event.target.value;
   refresh();
+});
+document.addEventListener('keydown', (event) => {
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName ?? '');
+  if (event.key === '/' && !typing) {
+    event.preventDefault();
+    showView('checklist');
+    searchBox.focus();
+  }
 });
 document.getElementById('grade-filter').addEventListener('change', (event) => {
   ui.grade = event.target.value;
@@ -138,7 +155,7 @@ document.getElementById('demo-btn').addEventListener('click', () => {
   refresh();
 });
 document.getElementById('share-btn').addEventListener('click', async () => {
-  const summary = shareSummary(doc, state, isEarned, (s, t) => Number(s.counters[t.name] ?? 0) || 0, plannerOrder);
+  const summary = shareSummary(doc, state, isEarned, counterOf, plannerOrder);
   try {
     await navigator.clipboard.writeText(summary);
     els.saveStatus.textContent = 'Progress summary copied to the clipboard — paste it anywhere.';
@@ -153,7 +170,7 @@ document.getElementById('export-btn').addEventListener('click', () => {
   link.download = 'gta6-trophy-atlas-progress.json';
   link.click();
   URL.revokeObjectURL(link.href);
-  els.saveStatus.textContent = 'Exported — earned ticks, counters, notes and settings are in the downloaded file.';
+  els.saveStatus.textContent = 'Exported — earned ticks, counters, notes and settings are in the downloaded file (format version 2; older atlas builds can still read the earned list).';
 });
 document.getElementById('import-file').addEventListener('change', async (event) => {
   const file = event.target.files[0];

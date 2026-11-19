@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GTA VI Trophy Atlas — offline guide & tracker for all 55 trophies</title>
-<meta name="description" content="Offline GTA VI trophy guide and tracker: all 55 official PS5 trophies with cited guides, a platinum roadmap, missable flags, saved progress, filters and a spoiler setting.">
+<meta name="description" content="Offline GTA VI trophy guide and tracker: all 55 official PS5 trophies with cited guides, a step-by-step breakdown and timing for each, a platinum roadmap, missable flags, saved progress, filters and a spoiler setting.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,12 +12,13 @@
   <div class="brand">
     <p class="kicker">GRAND THEFT AUTO VI · PLAYSTATION 5 · OFFLINE GUIDE</p>
     <h1>GTA VI Trophy Atlas</h1>
-    <p class="tagline">All <strong>55 trophies</strong> — 1 platinum, 2 gold, 6 silver, 46 bronze — each with its official name, description and grade, a guide in our own words, and the sources that guide cites. Works with the network off.</p>
+    <p class="tagline">All <strong>55 trophies</strong> — 1 platinum, 2 gold, 6 silver, 46 bronze — each with its official name, description and grade, a guide in our own words, the sources that guide cites, and now a <strong>step-by-step breakdown, a timing line and a confidence badge</strong> for every single trophy. Works with the network off.</p>
   </div>
   <div class="scorecard" aria-label="Your progress">
     <p class="bigcount"><span id="earned-count">0</span><span class="of"> / 55 earned</span></p>
     <div class="bar" role="progressbar" aria-label="Trophies earned"><div id="bar-fill"></div></div>
     <p id="grade-line" class="muted">Platinum 0/1 · Gold 0/2 · Silver 0/6 · Bronze 0/46</p>
+    <p id="counter-line" class="muted">0% of the list · counters still open: —</p>
     <p id="next-line" class="nextline">Next up: finish Gone Fishing, then meditate on the Chapter 1 balcony.</p>
   </div>
 </header>
@@ -33,7 +34,7 @@
 <main>
   <section id="view-checklist" class="view">
     <div class="controls" aria-label="Filters">
-      <label class="search">Search <input id="search" type="search" placeholder="trophy, mission, place…" autocomplete="off"></label>
+      <label class="search">Search ( / ) <input id="search" type="search" placeholder="trophy, mission, place, step…" autocomplete="off"></label>
       <label>Grade
         <select id="grade-filter">
           <option value="all">All grades</option>
@@ -52,6 +53,7 @@
       <button type="button" class="chip" data-kind="missable">Missable</button>
       <button type="button" class="chip" data-kind="collectibles">Collectibles</button>
       <button type="button" class="chip" data-kind="activities">Activities</button>
+      <button type="button" class="chip" data-kind="counters">Counters</button>
       <button type="button" class="chip" data-kind="side">Side strands</button>
       <button type="button" class="chip" data-kind="world">World & crime</button>
       <button type="button" class="chip" data-kind="online">Online (0)</button>
@@ -66,7 +68,7 @@
 
   <section id="view-roadmap" class="view" hidden>
     <h2>Roadmap to the platinum</h2>
-    <p class="lede">Built from the official descriptions — which chapters and missions, which collectibles and counts, in what order — and the roadmap structure the cited guides measured at launch: one playthrough, no difficulty setting, no online trophies, about 200 hours, difficulty 4/10. Sources: PowerPyx Trophy Guide & Roadmap; GTABase 100% checklist; Push Square Trophy Guide.</p>
+    <p class="lede">Built from the official descriptions — which chapters and missions, which collectibles and counts, in what order — and the roadmap structure the cited guides measured at launch: one playthrough, no difficulty setting, no online trophies, about 200 hours, difficulty 4/10. Each step below also shows your own progress, the counter load it still holds, and the one thing not to get wrong in it. Sources: PowerPyx Trophy Guide & Roadmap; GTABase 100% checklist; Push Square Trophy Guide.</p>
     <div id="roadmap-steps"></div>
     <h3>Rules that protect the run</h3>
     <ul class="rules">
@@ -74,12 +76,13 @@
       <li><strong>Do the Chapter 1 balcony meditation before Chapter 1 ends.</strong> It is the one reported missable in the whole list — see Missables.</li>
       <li><strong>Cheats off for a trophy run.</strong> Launch guides report that turning on a cheat disables trophies and saving. (GTABase; PowerPyx via GTA-Zone summary)</li>
       <li><strong>Collect as you travel.</strong> Scan vehicles, study animals, grab cards and clear WAiNK spots during the story — the 100% checklist counts all of it later.</li>
+      <li><strong>Work the steps, not just the guide.</strong> Every trophy's pane breaks its hunt into ordered steps with a timing line — if a step names a window, the window is the plan.</li>
     </ul>
   </section>
 
   <section id="view-missables" class="view" hidden>
     <h2>Missables — flagged from the official descriptions</h2>
-    <p class="lede">A trophy is flagged here only where its official description points at a one-time window, or a cited guide reports one. Everything else is labelled honestly instead of being dressed up as missable.</p>
+    <p class="lede">A trophy is flagged here only where its official description points at a one-time window, or a cited guide reports one. Everything else is labelled honestly instead of being dressed up as missable. The flagged trophy is shown with its timing line and its full step breakdown, because a missable you only half-understand is a missable you miss.</p>
     <div id="missable-list"></div>
     <h3>Protected by a save, not truly missable</h3>
     <p>Every story trophy unlocks automatically when its named mission or chapter is completed, and guides report story trophies cannot be missed. They are still listed in the checklist with their chapter, because with no mission replay a per-chapter manual save is cheap insurance — and the final-mission save protects the choice-shaped trophies near the end, such as Actions Speak Louder (“Choices made (for better or worse)”).</p>
@@ -89,13 +92,13 @@
 
   <section id="view-planner" class="view" hidden>
     <h2>Next up planner</h2>
-    <p class="lede">The shortest honest path from where you are: the planner reads your saved progress and queues unearned trophies in roadmap order — missable first, then story, then checklist counters, then strands and clean-up.</p>
+    <p class="lede">The shortest honest path from where you are: the planner reads your saved progress and queues unearned trophies in roadmap order — missable first, then story, then checklist counters, then strands and clean-up. Every row now also shows the <strong>first step</strong> of that trophy's breakdown, so the queue tells you what starting actually looks like.</p>
     <ol id="planner-list" class="planner-list"></ol>
   </section>
 
   <section id="view-save" class="view" hidden>
     <h2>Save, export & settings</h2>
-    <p>Progress lives only in this browser (localStorage): earned ticks, counters, notes and settings. Nothing is sent anywhere — this app makes no network request.</p>
+    <p>Progress lives only in this browser (localStorage): earned ticks, counters, notes and settings. Nothing is sent anywhere — this app makes no network request. Export files are format version 2 and carry an earned count for a quick sanity check; version 1 files from the first build still import.</p>
     <div class="save-actions">
       <button type="button" id="demo-btn">Load demo progress (13 of 55 earned)</button>
       <button type="button" id="share-btn">Copy progress summary</button>
@@ -108,12 +111,12 @@
     <label class="check"><input id="spoiler-toggle-2" type="checkbox" checked> Spoiler shield: hide story trophy names & descriptions until earned</label>
     <h3>Sources for the whole atlas</h3>
     <ul id="sources-index"></ul>
-    <p class="muted">Official names, descriptions and grades are shown as PlayStation publishes them. Every other word in the guides is our own; a source is cited beside each guide, never copied. No Rockstar logo, artwork, box art or game screenshots are used — the look is this atlas's own.</p>
+    <p class="muted">Official names, descriptions and grades are shown as PlayStation publishes them. Every other word in the guides, steps and timing lines is our own; a source is cited beside each guide, never copied. No Rockstar logo, artwork, box art or game screenshots are used — the look is this atlas's own.</p>
   </section>
 </main>
 
 <footer>
-  <p>GTA VI Trophy Atlas — a free, open-source, offline trophy guide & tracker. Trophy data: the official PS5 list via Exophase and PSNProfiles. Guides cite PowerPyx, Push Square and GTABase where they use them.</p>
+  <p>GTA VI Trophy Atlas — a free, open-source, offline trophy guide & tracker. Trophy data: the official PS5 list via Exophase and PSNProfiles. Guides, steps and timing cite PowerPyx, Push Square and GTABase where they use them.</p>
 </footer>
 
 <script type="module" src="js/main.js"></script>

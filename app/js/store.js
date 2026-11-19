@@ -1,5 +1,11 @@
 // GTA VI Trophy Atlas — saved progress (localStorage only, nothing leaves the browser).
+// Revision in this build: the export file is version 2 and also carries a small
+// human-readable summary line count (earned, of 55) so a player can sanity-check
+// a file before importing it; importing still accepts version 1 files and plain
+// earned-name arrays from the first build, because a progress file a player
+// saved last week must never become unreadable just because the atlas improved.
 export const STORE_KEY = 'gta6-trophy-atlas-v1';
+export const EXPORT_VERSION = 2;
 
 export function emptyState() {
   return { earned: [], counters: {}, notes: {}, spoiler: true, demo: false };
@@ -30,6 +36,10 @@ export function isEarned(state, trophy) {
   return state.earned.includes(trophy.name);
 }
 
+export function countEarned(state, trophies) {
+  return trophies.filter((trophy) => isEarned(state, trophy)).length;
+}
+
 export function setEarned(state, trophy, on) {
   const set = new Set(state.earned);
   if (on) set.add(trophy.name);
@@ -52,7 +62,16 @@ export function setCounter(state, trophy, value) {
 
 export function exportPayload(state) {
   return JSON.stringify(
-    { app: 'gta6-trophy-atlas', version: 1, earned: state.earned, counters: state.counters, notes: state.notes, spoiler: state.spoiler },
+    {
+      app: 'gta6-trophy-atlas',
+      version: EXPORT_VERSION,
+      earned: state.earned,
+      earnedCount: state.earned.length,
+      ofTotal: 55,
+      counters: state.counters,
+      notes: state.notes,
+      spoiler: state.spoiler,
+    },
     null,
     2,
   );
@@ -64,7 +83,13 @@ export function importPayload(state, text, validNames) {
   if (!Array.isArray(earnedIn)) throw new Error('No earned list in that file.');
   state.earned = earnedIn.filter((name) => validNames.has(name));
   if (!Array.isArray(parsed)) {
-    if (parsed.counters && typeof parsed.counters === 'object') state.counters = parsed.counters;
+    if (parsed.counters && typeof parsed.counters === 'object') {
+      // Keep only counters that are real numbers; a hand-edited file should
+      // never be able to poison the tracker with a string where a count goes.
+      state.counters = Object.fromEntries(
+        Object.entries(parsed.counters).filter(([, value]) => Number.isFinite(Number(value))),
+      );
+    }
     if (parsed.notes && typeof parsed.notes === 'object') state.notes = parsed.notes;
     if (typeof parsed.spoiler === 'boolean') state.spoiler = parsed.spoiler;
   }
@@ -74,6 +99,8 @@ export function importPayload(state, text, validNames) {
 
 // A fixed, honest demo: 13 of 55 earned and five counters part-way, so a first-time
 // visitor (or a screenshot) can see the tracker working before ticking anything.
+// The revision keeps the same 13 — a demo that quietly inflated its numbers
+// would be lying about the very progress this app exists to track.
 export function demoState() {
   const state = emptyState();
   state.demo = true;
@@ -101,6 +128,6 @@ export function demoState() {
     "Don't Touch My Deck": 1,
     'Positive Mental Attitude': 1,
   };
-  state.notes = { 'Positive Mental Attitude': 'Balcony spot done in Chapter 1 — 17 spots to go.' };
+  state.notes = { 'Positive Mental Attitude': 'Balcony spot done in Chapter 1 — 17 spots to go. Steps 2 and 3 are the free-roam sweep.' };
   return state;
 }
