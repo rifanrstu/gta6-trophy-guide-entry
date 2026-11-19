@@ -1,53 +1,102 @@
-// GTA VI Trophy Atlas — entry program for gta6-trophy-guide-01 (Node 22, standard library only).
-// The atlas itself is the static app in app/: index.html, its stylesheet, the ES modules in
-// app/js/ and the trophy data in app/data/trophies.json. It needs no build step and no network.
-// This program's one job is to hand that app in exactly as the scorer expects: copy app/ and
-// screenshots/ beside this file into the output directory, then write dossier.json with the
-// vendored make.fun library (vendor/makefun-frontend.ts, left byte-for-byte as the kit ships it,
-// because the gate rebuilds the dossier with its own copy and compares the two).
-// Try the atlas locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// GTA VI Trophy Atlas — hand-in program (v4, Leonida Ledger build).
 //
-// Revision in this build: before handing anything in, the program now also checks the
-// revision's promise — that every one of the 55 trophies carries a non-empty guide, a
-// step breakdown of at least two steps, a timing line and a confidence note — and it
-// logs how many steps it is handing in. A data file that drifted from that promise is
-// visible in the run log instead of reaching the judge quietly half-finished.
+// What this file does, in order:
+//   1. Reads the trophy catalogue out of app/data/trophies.json and
+//      refuses to hand anything in unless all 55 trophies carry a
+//      guide, a three-step breakdown, a timing note and a confidence
+//      badge — a thin catalogue should fail here, not at the gate.
+//   2. Copies app/ and screenshots/ into the output directory, in a
+//      fixed sorted order so two runs write identical bytes.
+//   3. Writes dossier.json there with the kit's own library, imported
+//      unchanged from vendor/makefun-frontend.ts, under this bounty’s
+//      caps.
+// Every path is anchored to this file's directory, never to the
+// caller's working directory, and the output folder is created
+// recursively before anything is copied into it.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-frontend.ts';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildDossier } from "./vendor/makefun-frontend.ts";
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const EXPECTED_TROPHY_COUNT = 55;
+const MINIMUM_STEPS = 3;
 
-// The atlas promises 55 trophies; say so in the run log if the data file ever drifts,
-// with the grade split the official list publishes (1 platinum, 2 gold, 6 silver, 46 bronze).
-const trophyDoc = JSON.parse(readFileSync(join(here, 'app', 'data', 'trophies.json'), 'utf8'));
-const trophyList = Array.isArray(trophyDoc) ? trophyDoc : trophyDoc.trophies ?? [];
-const gradeSplit = ['platinum', 'gold', 'silver', 'bronze'].map((grade) => `${trophyList.filter((t) => t.grade === grade).length} ${grade}`).join(', ');
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const outputRoot =
+  process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-const stepCount = trophyList.reduce((sum, t) => sum + (Array.isArray(t.steps) ? t.steps.length : 0), 0);
-const incomplete = trophyList.filter(
-  (t) => !String(t.guide ?? '').trim() || !Array.isArray(t.steps) || t.steps.length < 2 || !String(t.timing ?? '').trim() || !String(t.confidence ?? '').trim(),
-);
-console.log(`GTA VI Trophy Atlas: handing in ${trophyList.length} trophies with their guides (${gradeSplit}) and ${stepCount} guide steps.`);
-if (incomplete.length) {
-  console.log(`Warning: ${incomplete.length} trophies are missing a guide, steps, timing or confidence: ${incomplete.map((t) => t.name).join('; ')}`);
+function fail(message: string): never {
+  throw new Error(`trophy-atlas hand-in: ${message}`);
 }
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+function readCatalogue(): void {
+  const cataloguePath = join(repoRoot, "app", "data", "trophies.json");
+  if (!existsSync(cataloguePath)) fail("app/data/trophies.json is missing");
+  const parsed = JSON.parse(readFileSync(cataloguePath, "utf8")) as {
+    trophies?: unknown;
+  };
+  const rows = Array.isArray(parsed) ? parsed : parsed.trophies;
+  if (!Array.isArray(rows)) fail("trophies.json holds no trophies array");
+  if (rows.length !== EXPECTED_TROPHY_COUNT) {
+    fail(`expected ${EXPECTED_TROPHY_COUNT} trophies, found ${rows.length}`);
+  }
+  for (const row of rows as Array<Record<string, unknown>>) {
+    const label = typeof row.name === "string" ? row.name : "<unnamed>";
+    if (typeof row.guide !== "string" || row.guide.trim() === "") {
+      fail(`trophy "${label}" has no guide`);
+    }
+    if (!Array.isArray(row.steps) || row.steps.length < MINIMUM_STEPS) {
+      fail(`trophy "${label}" has fewer than ${MINIMUM_STEPS} steps`);
+    }
+    if (typeof row.timing !== "string" || row.timing.trim() === "") {
+      fail(`trophy "${label}" has no timing note`);
+    }
+    if (typeof row.confidence !== "string" || row.confidence.trim() === "") {
+      fail(`trophy "${label}" has no confidence badge`);
+    }
+  }
+}
 
-// Caps from the scorer's gate (reference/gate.json): text_max_bytes shapes the dossier text;
-// the rest refuse an entry the scorer would refuse anyway (over 4 screenshots or one over
-// 256 KiB; over 993 entries or 48 MiB in app/, which shares /output's own 1,000-entry cap
-// with screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, { text_max_bytes: 163840, screenshots: { max: 4, max_bytes: 262144 }, app_max_files: 993, app_max_bytes: 50331648 }),
-);
+function copyTree(sourceDir: string, targetDir: string): void {
+  mkdirSync(targetDir, { recursive: true });
+  const entries = readdirSync(sourceDir).sort();
+  for (const entry of entries) {
+    const from = join(sourceDir, entry);
+    const to = join(targetDir, entry);
+    if (statSync(from).isDirectory()) {
+      copyTree(from, to);
+    } else {
+      copyFileSync(from, to);
+    }
+  }
+}
+
+function main(): void {
+  readCatalogue();
+  mkdirSync(outputRoot, { recursive: true });
+  copyTree(join(repoRoot, "app"), join(outputRoot, "app"));
+  copyTree(join(repoRoot, "screenshots"), join(outputRoot, "screenshots"));
+  const dossier = buildDossier(outputRoot, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    app_max_files: 993,
+    app_max_bytes: 50331648,
+    app_path_max_bytes: 1000,
+  });
+  writeFileSync(join(outputRoot, "dossier.json"), dossier);
+  const where = relative(process.cwd(), outputRoot) || outputRoot;
+  console.log(
+    `trophy-atlas: handed in app/ + screenshots/ + dossier.json (${dossier.length} bytes) at ${where.split(sep).join("/")}`,
+  );
+}
+
+main();

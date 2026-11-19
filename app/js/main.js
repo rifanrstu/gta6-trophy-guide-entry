@@ -1,194 +1,234 @@
-// GTA VI Trophy Atlas — boot, tabs, filters and wiring.
-// Deep links work too: ?view=roadmap|missables|planner|save, ?kind=missable|counters,
-// ?select=<trophy name>, ?spoiler=off, ?demo=1 (a 13-of-55 demo progress).
-// Revision in this build: the scorecard gains a counters line (percent complete
-// and what the open counters still ask for), the kind chips gain a Counters
-// filter, and pressing "/" anywhere jumps to the search box, because a tracker
-// you open 200 times should be keyboard-fast by the end of the run.
-import { loadTrophyDoc, matchesKind, plannerOrder, shareSummary, stepsFor } from './data.js';
-import { demoState, exportPayload, importPayload, isEarned, loadState, saveState, setCounter, setEarned } from './store.js';
-import { renderChecklist, renderDetail, renderMissables, renderPlanner, renderRoadmap, renderScorecard, renderSourcesIndex } from './views.js';
+// Leonida Ledger — boot and wiring.
+// Loads the catalogue, restores (or demo-seeds) the saved progress,
+// renders the masthead, tabs and the active view, and translates every
+// click, keystroke and file choice into a store update plus a repaint.
 
-const params = new URLSearchParams(location.search);
-let state = loadState();
-if (params.get('demo') === '1' && state.earned.length === 0 && !state.demo) {
-  state = demoState();
-  saveState(state);
-}
-if (params.get('spoiler') === 'off') state.spoiler = false;
-if (params.get('spoiler') === 'on') state.spoiler = true;
+import { fetchTrophies } from "./data.js";
+import {
+  exportProgress,
+  importProgress,
+  isEarned,
+  loadProgress,
+  saveProgress,
+  seedDemoProgress,
+  setCounter,
+  setNote,
+  summaryLine,
+  toggleEarned,
+} from "./store.js";
+import {
+  guideView,
+  headerView,
+  missablesView,
+  navView,
+  plannerView,
+  roadmapView,
+  saveView,
+} from "./views.js";
 
-const doc = await loadTrophyDoc();
-const validNames = new Set(doc.trophies.map((t) => t.name));
+const VIEW_IDS = ["guide", "roadmap", "missables", "planner", "save"];
 
-const ui = {
-  view: ['roadmap', 'missables', 'planner', 'save'].includes(params.get('view')) ? params.get('view') : 'checklist',
-  kind: params.get('kind') ?? 'all',
-  grade: 'all',
-  query: '',
-  hideEarned: false,
-  selected: validNames.has(params.get('select')) ? params.get('select') : 'Positive Mental Attitude',
-  matches(trophy, earned) {
-    if (this.hideEarned && earned) return false;
-    if (this.grade !== 'all' && trophy.grade !== this.grade) return false;
-    if (!matchesKind(trophy, this.kind)) return false;
-    if (this.query) {
-      const stepsText = stepsFor(trophy).join(' ');
-      const hay = `${trophy.name} ${trophy.description} ${trophy.kind} ${trophy.guide} ${stepsText}`.toLowerCase();
-      if (!hay.includes(this.query.toLowerCase())) return false;
-    }
-    return true;
-  },
+const state = {
+  trophies: [],
+  progress: null,
+  view: "guide",
+  search: "",
+  kind: "all",
+  grade: "all",
+  stateFilter: "all",
+  selected: null,
 };
 
-const els = {
-  earnedCount: document.getElementById('earned-count'),
-  barFill: document.getElementById('bar-fill'),
-  gradeLine: document.getElementById('grade-line'),
-  counterLine: document.getElementById('counter-line'),
-  nextLine: document.getElementById('next-line'),
-  list: document.getElementById('trophy-list'),
-  detail: document.getElementById('detail'),
-  resultLine: document.getElementById('result-line'),
-  onlineNote: document.getElementById('online-note'),
-  roadmapSteps: document.getElementById('roadmap-steps'),
-  missableList: document.getElementById('missable-list'),
-  plannerList: document.getElementById('planner-list'),
-  sourcesIndex: document.getElementById('sources-index'),
-  saveStatus: document.getElementById('save-status'),
-  plannerHelpers: { plannerOrder },
-};
-
-const counterOf = (s, t) => Number(s.counters[t.name] ?? 0) || 0;
-
-function refresh() {
-  renderScorecard(doc, state, els);
-  const next = plannerOrder(doc.trophies, state, isEarned, counterOf)[0];
-  els.nextLine.textContent = next
-    ? `Next up: ${next.name} — ${next.missable ? 'missable, window first' : next.kind === 'story' ? 'story, automatic on completion' : 'its first step is in the planner'}.`
-    : 'Next up: nothing — all 55 earned. Platinum unlocked.';
-  renderChecklist(doc, state, ui, els, selectTrophy, toggleEarned);
-  renderDetail(doc, state, els, detailHandlers);
-  renderRoadmap(doc, state, els);
-  renderMissables(doc, els);
-  renderPlanner(doc, state, els);
-  renderSourcesIndex(doc, els);
-  for (const toggle of [document.getElementById('spoiler-toggle'), document.getElementById('spoiler-toggle-2')]) {
-    if (toggle) toggle.checked = state.spoiler;
-  }
+function viewFromHash() {
+  const raw = window.location.hash.replace(/^#\/?/, "").split("?")[0];
+  return VIEW_IDS.includes(raw) ? raw : "guide";
 }
 
-function selectTrophy(name) {
-  ui.selected = name;
-  refresh();
+function uiState() {
+  return {
+    search: state.search,
+    kind: state.kind,
+    grade: state.grade,
+    state: state.stateFilter,
+    shieldOn: state.progress.shieldOn,
+    selected: state.selected,
+  };
 }
 
-function toggleEarned(trophy, on) {
-  setEarned(state, trophy, on);
-  refresh();
+function render() {
+  const root = document.getElementById("ledger-root");
+  if (!root) return;
+  const views = {
+    guide: () => guideView(state.trophies, state.progress, uiState()),
+    roadmap: () => roadmapView(state.trophies, state.progress),
+    missables: () => missablesView(state.trophies, state.progress),
+    planner: () => plannerView(state.trophies, state.progress),
+    save: () => saveView(state.trophies, state.progress),
+  };
+  root.innerHTML =
+    headerView(state.trophies, state.progress) +
+    navView(state.view) +
+    `<main class="lx-main" id="view-main">${views[state.view]()}</main>`;
+  restoreFilterFocus();
 }
 
-const detailHandlers = {
-  get selectedName() {
-    return ui.selected;
-  },
-  onToggle: toggleEarned,
-  onCounter(trophy, value) {
-    setCounter(state, trophy, value);
-    refresh();
-  },
-  onNote(trophy, value) {
-    state.notes[trophy.name] = value;
-    saveState(state);
-  },
-};
-
-function showView(view) {
-  ui.view = view;
-  for (const tab of document.querySelectorAll('.tab')) tab.classList.toggle('is-active', tab.dataset.view === view);
-  for (const section of document.querySelectorAll('.view')) section.hidden = section.id !== `view-${view}`;
-}
-
-for (const tab of document.querySelectorAll('.tab')) {
-  tab.addEventListener('click', () => showView(tab.dataset.view));
-}
-for (const chip of document.querySelectorAll('#kind-chips .chip')) {
-  chip.classList.toggle('is-active', chip.dataset.kind === ui.kind);
-  chip.addEventListener('click', () => {
-    ui.kind = chip.dataset.kind;
-    for (const other of document.querySelectorAll('#kind-chips .chip')) other.classList.toggle('is-active', other === chip);
-    refresh();
-  });
-}
-const searchBox = document.getElementById('search');
-searchBox.addEventListener('input', (event) => {
-  ui.query = event.target.value;
-  refresh();
-});
-document.addEventListener('keydown', (event) => {
-  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName ?? '');
-  if (event.key === '/' && !typing) {
-    event.preventDefault();
-    showView('checklist');
+function restoreFilterFocus() {
+  if (state.view !== "guide") return;
+  const searchBox = document.getElementById("filter-search");
+  if (searchBox && document.activeElement?.id === "filter-search-marker") {
     searchBox.focus();
+    searchBox.setSelectionRange(searchBox.value.length, searchBox.value.length);
   }
-});
-document.getElementById('grade-filter').addEventListener('change', (event) => {
-  ui.grade = event.target.value;
-  refresh();
-});
-document.getElementById('hide-earned').addEventListener('change', (event) => {
-  ui.hideEarned = event.target.checked;
-  refresh();
-});
-for (const toggleId of ['spoiler-toggle', 'spoiler-toggle-2']) {
-  document.getElementById(toggleId).addEventListener('change', (event) => {
-    state.spoiler = event.target.checked;
-    saveState(state);
-    refresh();
-  });
 }
-document.getElementById('demo-btn').addEventListener('click', () => {
-  state = demoState();
-  saveState(state);
-  els.saveStatus.textContent = 'Demo progress loaded: 13 of 55 earned, five counters part-way, spoiler shield off so story names show. Reset restores a blank tracker.';
-  refresh();
-});
-document.getElementById('share-btn').addEventListener('click', async () => {
-  const summary = shareSummary(doc, state, isEarned, counterOf, plannerOrder);
-  try {
-    await navigator.clipboard.writeText(summary);
-    els.saveStatus.textContent = 'Progress summary copied to the clipboard — paste it anywhere.';
-  } catch {
-    els.saveStatus.textContent = summary;
-  }
-});
-document.getElementById('export-btn').addEventListener('click', () => {
-  const blob = new Blob([exportPayload(state)], { type: 'application/json' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'gta6-trophy-atlas-progress.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
-  els.saveStatus.textContent = 'Exported — earned ticks, counters, notes and settings are in the downloaded file (format version 2; older atlas builds can still read the earned list).';
-});
-document.getElementById('import-file').addEventListener('change', async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    const count = importPayload(state, await file.text(), validNames);
-    els.saveStatus.textContent = `Imported ${count} earned trophies from that file.`;
-  } catch {
-    els.saveStatus.textContent = 'That file could not be imported — it is not an atlas progress file.';
-  }
-  refresh();
-});
-document.getElementById('reset-btn').addEventListener('click', () => {
-  state = { earned: [], counters: {}, notes: {}, spoiler: state.spoiler, demo: false };
-  saveState(state);
-  els.saveStatus.textContent = 'Progress reset. The atlas itself is untouched.';
-  refresh();
-});
 
-showView(ui.view);
-refresh();
+function findTrophy(name) {
+  return state.trophies.find((trophy) => trophy.name === name) ?? null;
+}
+
+function handleActionClick(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const trophy = button.dataset.name ? findTrophy(button.dataset.name) : null;
+
+  if (action === "select" && trophy) {
+    state.selected = trophy.name;
+    render();
+    return;
+  }
+  if (action === "toggle-earned" && trophy) {
+    if (button.type === "checkbox") return; // the change handler owns it
+    toggleEarned(state.progress, trophy);
+    state.selected = trophy.name;
+    render();
+    return;
+  }
+  if (action === "counter-step" && trophy) {
+    const delta = Number(button.dataset.delta ?? "0");
+    const current = state.progress.counters[trophy.name] ?? 0;
+    setCounter(state.progress, trophy, current + delta);
+    state.selected = trophy.name;
+    render();
+    return;
+  }
+  if (action === "export") {
+    exportProgress(state.progress);
+    flashSaveFeedback("Progress exported as a JSON file.");
+    return;
+  }
+  if (action === "copy-summary") {
+    const line = summaryLine(state.progress, state.trophies);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(line)
+        .then(() => flashSaveFeedback("Summary copied: " + line))
+        .catch(() => flashSaveFeedback(line));
+    } else {
+      flashSaveFeedback(line);
+    }
+    return;
+  }
+  if (action === "reset") {
+    state.progress.earned = {};
+    state.progress.counters = {};
+    state.progress.notes = {};
+    saveProgress(state.progress);
+    render();
+    flashSaveFeedback("Ledger reset. Nothing is earned, counted or noted now.");
+  }
+}
+
+function flashSaveFeedback(message) {
+  const spot = document.getElementById("save-feedback");
+  if (spot) spot.textContent = message;
+}
+
+function handleChange(event) {
+  const target = event.target;
+  if (target.id === "filter-kind") {
+    state.kind = target.value;
+    render();
+  } else if (target.id === "filter-grade") {
+    state.grade = target.value;
+    render();
+  } else if (target.id === "filter-state") {
+    state.stateFilter = target.value;
+    render();
+  } else if (target.id === "toggle-shield") {
+    state.progress.shieldOn = target.checked;
+    saveProgress(state.progress);
+    render();
+  } else if (target.dataset.action === "toggle-earned") {
+    const trophy = findTrophy(target.dataset.name);
+    if (trophy) {
+      toggleEarned(state.progress, trophy);
+      state.selected = trophy.name;
+      render();
+    }
+  } else if (target.id === "import-file") {
+    const file = target.files?.[0];
+    if (!file) return;
+    importProgress(file)
+      .then((clean) => {
+        state.progress = clean;
+        state.view = "save";
+        render();
+        flashSaveFeedback("Progress imported. The ledger now matches the file.");
+      })
+      .catch(() => flashSaveFeedback("That file could not be read as a ledger export."));
+  }
+}
+
+function handleInput(event) {
+  const target = event.target;
+  if (target.id === "filter-search") {
+    target.id = "filter-search-marker";
+    state.search = target.value;
+    render();
+  } else if (target.id === "note-editor") {
+    const trophy = findTrophy(target.dataset.name);
+    if (trophy) {
+      setNote(state.progress, trophy, target.value);
+    }
+  }
+}
+
+async function boot() {
+  const params = new URLSearchParams(window.location.search);
+  state.trophies = await fetchTrophies();
+  const saved = loadProgress();
+  const hasSavedMarks =
+    Object.keys(saved.earned).length > 0 ||
+    Object.keys(saved.counters).length > 0;
+  if (params.has("demo") && !hasSavedMarks) {
+    state.progress = seedDemoProgress(state.trophies);
+  } else {
+    state.progress = saved;
+  }
+  const focusName = params.get("focus");
+  if (focusName && findTrophy(focusName)) {
+    state.selected = focusName;
+  } else {
+    const firstOpen = state.trophies.find(
+      (trophy) => trophy.target && !isEarned(state.progress, trophy),
+    );
+    state.selected = (firstOpen ?? state.trophies[0])?.name ?? null;
+  }
+  state.view = viewFromHash();
+  render();
+}
+
+window.addEventListener("hashchange", () => {
+  state.view = viewFromHash();
+  render();
+});
+document.addEventListener("click", handleActionClick);
+document.addEventListener("change", handleChange);
+document.addEventListener("input", handleInput);
+
+boot().catch((error) => {
+  const root = document.getElementById("ledger-root");
+  if (root) {
+    root.innerHTML = `<p class="lx-load-error">The ledger could not open: ${String(error?.message ?? error)}</p>`;
+  }
+});
