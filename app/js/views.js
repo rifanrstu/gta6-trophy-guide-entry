@@ -212,7 +212,7 @@ export function detailView(trophy, progress) {
     : "";
   return `
     <aside class="lx-detail" id="detail-pane">
-      <p class="lx-detail-kicker">${gradeChip(trophy)} ${kindChip(trophy)} ${confidenceChip(trophy)}</p>
+      <p class="lx-detail-kicker">${gradeChip(trophy)} ${kindChip(trophy)} ${confidenceChip(trophy)} <span class="lx-kind">Roadmap stage ${stageIndexFor(trophy) + 1} of ${ROAD_STAGES.length}</span></p>
       <h2 class="lx-detail-name">${esc(displayName(progress, trophy))}</h2>
       <p class="lx-detail-desc">${esc(displayDescription(progress, trophy))}</p>
       ${trophy.missable ? `<p class="lx-detail-missable">Missable — protect this one with a spare save before its chapter.</p>` : ""}
