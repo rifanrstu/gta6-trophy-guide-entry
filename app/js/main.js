@@ -1,7 +1,7 @@
 // GTA VI Trophy Atlas — boot, tabs, filters and wiring.
 // Deep links work too: ?view=roadmap|missables|planner|save, ?kind=missable,
 // ?select=<trophy name>, ?spoiler=off, ?demo=1 (a 13-of-55 demo progress).
-import { loadTrophyDoc, matchesKind, plannerOrder } from './data.js';
+import { loadTrophyDoc, matchesKind, plannerOrder, shareSummary } from './data.js';
 import { demoState, exportPayload, importPayload, isEarned, loadState, saveState, setCounter, setEarned } from './store.js';
 import { renderChecklist, renderDetail, renderMissables, renderPlanner, renderRoadmap, renderScorecard, renderSourcesIndex } from './views.js';
 
@@ -61,7 +61,7 @@ function refresh() {
     : 'Next up: nothing — all 55 earned. Platinum unlocked.';
   renderChecklist(doc, state, ui, els, selectTrophy, toggleEarned);
   renderDetail(doc, state, els, detailHandlers);
-  renderRoadmap(doc, els);
+  renderRoadmap(doc, state, els);
   renderMissables(doc, els);
   renderPlanner(doc, state, els);
   renderSourcesIndex(doc, els);
@@ -136,6 +136,15 @@ document.getElementById('demo-btn').addEventListener('click', () => {
   saveState(state);
   els.saveStatus.textContent = 'Demo progress loaded: 13 of 55 earned, five counters part-way, spoiler shield off so story names show. Reset restores a blank tracker.';
   refresh();
+});
+document.getElementById('share-btn').addEventListener('click', async () => {
+  const summary = shareSummary(doc, state, isEarned, (s, t) => Number(s.counters[t.name] ?? 0) || 0, plannerOrder);
+  try {
+    await navigator.clipboard.writeText(summary);
+    els.saveStatus.textContent = 'Progress summary copied to the clipboard — paste it anywhere.';
+  } catch {
+    els.saveStatus.textContent = summary;
+  }
 });
 document.getElementById('export-btn').addEventListener('click', () => {
   const blob = new Blob([exportPayload(state)], { type: 'application/json' });

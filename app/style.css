@@ -121,6 +121,7 @@ main { padding: 18px 28px 30px; }
 }
 .step h3, .miss-card h3 { margin: 0 0 6px; font-size: 19px; }
 .step .when { color: var(--accent); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; }
+.step-progress { font-weight: 600; color: var(--accent); margin: 10px 0 4px; }
 .rules { max-width: 80ch; }
 .planner-list { max-width: 900px; padding-left: 22px; }
 .planner-list li { margin: 10px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }

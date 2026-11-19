@@ -17,10 +17,12 @@ import { buildDossier } from './vendor/makefun-frontend.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// The atlas promises 55 trophies; say so in the run log if the data file ever drifts.
+// The atlas promises 55 trophies; say so in the run log if the data file ever drifts,
+// with the grade split the official list publishes (1 platinum, 2 gold, 6 silver, 46 bronze).
 const trophyDoc = JSON.parse(readFileSync(join(here, 'app', 'data', 'trophies.json'), 'utf8'));
-const trophyCount = Array.isArray(trophyDoc) ? trophyDoc.length : trophyDoc.trophies?.length ?? 0;
-console.log(`GTA VI Trophy Atlas: handing in ${trophyCount} trophies with their guides.`);
+const trophyList = Array.isArray(trophyDoc) ? trophyDoc : trophyDoc.trophies ?? [];
+const gradeSplit = ['platinum', 'gold', 'silver', 'bronze'].map((grade) => `${trophyList.filter((t) => t.grade === grade).length} ${grade}`).join(', ');
+console.log(`GTA VI Trophy Atlas: handing in ${trophyList.length} trophies with their guides (${gradeSplit}).`);
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });

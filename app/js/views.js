@@ -1,7 +1,7 @@
 // GTA VI Trophy Atlas — rendering: scorecard, checklist rows, the guide pane,
 // roadmap, missables, planner and the sources index. All text comes from
 // data/trophies.json or js/data.js; this file only lays it out.
-import { GRADE_ORDER, KIND_LABELS, ROADMAP, displayDescription, displayName, isMasked, plannerReason, stageTrophies } from './data.js';
+import { GRADE_ORDER, KIND_LABELS, ROADMAP, displayDescription, displayName, isMasked, plannerReason, stageTrophies, stepProgress } from './data.js';
 import { counterOf, isEarned } from './store.js';
 
 function el(tag, className, text) {
@@ -152,12 +152,20 @@ function renderCounter(trophy, state, handlers) {
   return wrap;
 }
 
-export function renderRoadmap(doc, els) {
+export function renderRoadmap(doc, state, els) {
   const host = els.roadmapSteps;
   host.replaceChildren();
   for (const step of ROADMAP) {
     const card = el('article', 'step');
     card.append(el('p', 'when', step.when), el('h3', '', step.title), el('p', '', step.body));
+    const progress = stepProgress(doc.trophies, state, isEarned, step.stage);
+    if (progress.total) {
+      const bar = el('div', 'counter-bar');
+      const fill = el('div');
+      fill.style.width = `${progress.pct}%`;
+      bar.append(fill);
+      card.append(el('p', 'step-progress', `Your progress in this step: ${progress.earned} of ${progress.total} trophies earned (${progress.pct}%)`), bar);
+    }
     const names = stageTrophies(doc.trophies, step.stage).map((t) => t.name);
     if (names.length) card.append(el('p', 'muted', `Trophies in this step (${names.length}): ${names.join(' · ')}`));
     host.append(card);
@@ -201,6 +209,7 @@ export function renderPlanner(doc, state, els) {
     item.append(
       el('strong', '', `${index + 1}. ${trophy.name} `),
       badge(trophy.grade, 'grade'),
+      badge(`Step ${trophy.stage ?? '—'}`),
       document.createTextNode(` — ${plannerReason(trophy, state, counterOf)}`),
     );
     host.append(item);

@@ -88,6 +88,35 @@ export function stageTrophies(trophies, stage) {
   return trophies.filter((trophy) => trophy.stage === stage);
 }
 
+// Per-step progress for the roadmap view: how much of each step the saved
+// tracker already covers, so the roadmap reads as a plan with a position on
+// it rather than a static essay.
+export function stepProgress(trophies, state, isEarned, stage) {
+  const inStep = stageTrophies(trophies, stage);
+  const earned = inStep.filter((trophy) => isEarned(state, trophy)).length;
+  return { earned, total: inStep.length, pct: inStep.length ? Math.round((earned / inStep.length) * 100) : 0 };
+}
+
+// A plain-text progress summary the player can paste anywhere (a forum post,
+// a message to a co-op partner): counts by grade, the counters under way and
+// the next three trophies the planner would send them to.
+export function shareSummary(doc, state, isEarned, counterOf, plannerOrderFn) {
+  const trophies = doc.trophies;
+  const earned = trophies.filter((t) => isEarned(state, t));
+  const byGrade = (grade) => `${earned.filter((t) => t.grade === grade).length}/${trophies.filter((t) => t.grade === grade).length} ${grade}`;
+  const lines = [
+    `GTA VI Trophy Atlas — my platinum run: ${earned.length}/55 trophies`,
+    ['platinum', 'gold', 'silver', 'bronze'].map(byGrade).join(' · '),
+  ];
+  const counters = trophies.filter((t) => t.target && counterOf(state, t) > 0 && !isEarned(state, t));
+  if (counters.length) {
+    lines.push('Counters under way: ' + counters.map((t) => `${t.name} ${counterOf(state, t)}/${t.target}`).join('; '));
+  }
+  const next = plannerOrderFn(trophies, state, isEarned, counterOf).slice(0, 3);
+  if (next.length) lines.push('Next up: ' + next.map((t) => t.name).join(' → '));
+  return lines.join('\n');
+}
+
 export function plannerReason(trophy, state, counterOf) {
   if (trophy.missable) return 'Missable — its Chapter 1 window closes first. Do this before anything else.';
   if (trophy.kind === 'story') return 'Story — unlocks automatically at its mission or chapter; keep a save at the chapter start.';
