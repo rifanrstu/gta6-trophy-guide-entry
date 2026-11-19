@@ -1,7 +1,133 @@
-body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
-header { display: flex; justify-content: space-between; align-items: baseline; }
-.controls { display: flex; gap: 16px; margin: 12px 0; align-items: center; }
-.import input { font-size: 12px; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; white-space: pre-line; }
-th { background: #f2f2f2; }
+/* GTA VI Trophy Atlas — night theme, one coral accent, medal swatches as data marks.
+   No webfonts, no images, no network: system serif display + system sans body. */
+:root {
+  --bg: #0f1218;
+  --surface: #171c24;
+  --surface2: #1e2530;
+  --text: #edeae4;
+  --muted: #9aa3af;
+  --border: #2b333f;
+  --accent: #ff6b4a;
+  --accent-ink: #14100e;
+  --platinum: #d8e1ea;
+  --gold: #d4af5a;
+  --silver: #aeb6bf;
+  --bronze: #c98b5e;
+  --danger: #ffb3a3;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: ui-sans-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px; line-height: 1.5;
+}
+h1, h2, h3, .bigcount { font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif; }
+a { color: var(--accent); }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+.topbar {
+  display: flex; gap: 28px; flex-wrap: wrap; justify-content: space-between;
+  padding: 26px 28px 18px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #141a23, var(--bg));
+}
+.brand { max-width: 700px; }
+.kicker { margin: 0 0 6px; font-size: 11px; letter-spacing: .18em; color: var(--accent); font-weight: 700; }
+h1 { margin: 0; font-size: 40px; line-height: 1.05; }
+.tagline { margin: 10px 0 0; color: var(--muted); max-width: 62ch; }
+.tagline strong { color: var(--text); }
+.scorecard {
+  min-width: 280px; max-width: 360px; flex: 1;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+}
+.bigcount { margin: 0; font-size: 34px; }
+.bigcount .of { font-size: 17px; color: var(--muted); }
+.bar { height: 10px; background: var(--surface2); border-radius: 6px; overflow: hidden; margin: 10px 0 8px; }
+#bar-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 6px; transition: width .25s ease; }
+.muted { color: var(--muted); }
+.nextline { margin: 8px 0 0; font-size: 13.5px; border-top: 1px dashed var(--border); padding-top: 8px; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 28px 0; }
+.tab {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 999px; padding: 8px 14px; font-weight: 600;
+}
+.tab.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+main { padding: 18px 28px 30px; }
+.view h2 { font-size: 26px; margin: 4px 0 8px; }
+.lede { color: var(--muted); max-width: 78ch; }
+
+.controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.controls label.check, label.check { flex-direction: row; align-items: center; color: var(--text); font-size: 14px; }
+.controls input[type="search"], .controls select {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; min-width: 210px;
+}
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 6px; }
+.chip { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 6px 12px; }
+.chip.is-active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.note { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 10px 12px; max-width: 80ch; }
+
+.layout { display: grid; grid-template-columns: minmax(430px, 1.15fr) minmax(360px, .85fr); gap: 18px; align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+.trophy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.trophy-row {
+  display: grid; grid-template-columns: auto 14px 1fr auto; gap: 10px; align-items: center;
+  width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.trophy-row:hover { border-color: var(--accent); }
+.trophy-row.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.trophy-row.is-earned { opacity: .78; }
+.trophy-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+.swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.swatch.platinum { background: var(--platinum); } .swatch.gold { background: var(--gold); }
+.swatch.silver { background: var(--silver); } .swatch.bronze { background: var(--bronze); }
+.row-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.row-name { font-weight: 700; }
+.row-desc { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; color: var(--muted); text-transform: uppercase; }
+.badge.grade { color: var(--text); }
+.badge.missable { border-color: var(--accent); color: var(--danger); }
+.badge.counter { text-transform: none; letter-spacing: 0; }
+
+.detail {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px 20px; position: sticky; top: 14px;
+}
+.detail h2 { margin: 2px 0 4px; font-size: 24px; }
+.detail .official { color: var(--muted); font-style: italic; margin: 0 0 10px; }
+.detail h3 { margin: 16px 0 6px; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.detail p { margin: 6px 0; }
+.detail ul { margin: 6px 0; padding-left: 18px; }
+.detail .warn { border: 1px solid var(--accent); border-radius: 6px; padding: 10px 12px; background: var(--surface2); }
+.counter-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.counter-box button { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-weight: 700; }
+.counter-box input { width: 84px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.counter-bar { height: 8px; background: var(--surface2); border-radius: 6px; overflow: hidden; flex: 1; min-width: 120px; }
+.counter-bar div { height: 100%; background: var(--accent); }
+.detail textarea {
+  width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; color: var(--text);
+}
+.detail label.check { margin-top: 10px; }
+
+.step, .miss-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 18px; margin: 12px 0; max-width: 900px;
+}
+.step h3, .miss-card h3 { margin: 0 0 6px; font-size: 19px; }
+.step .when { color: var(--accent); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; }
+.rules { max-width: 80ch; }
+.planner-list { max-width: 900px; padding-left: 22px; }
+.planner-list li { margin: 10px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.save-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.save-actions button, .import-btn {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 14px; font-weight: 600;
+}
+.import-btn input { display: none; }
+footer { border-top: 1px solid var(--border); padding: 16px 28px 26px; color: var(--muted); font-size: 13px; }
+.spoiler-mask { color: var(--muted); letter-spacing: .02em; }

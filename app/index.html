@@ -3,23 +3,118 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GTA VI trophy checklist</title>
+<title>GTA VI Trophy Atlas — offline guide & tracker for all 55 trophies</title>
+<meta name="description" content="Offline GTA VI trophy guide and tracker: all 55 official PS5 trophies with cited guides, a platinum roadmap, missable flags, saved progress, filters and a spoiler setting.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>GTA VI trophy checklist</h1>
-  <p id="progress">0 of 55 earned</p>
+<header class="topbar">
+  <div class="brand">
+    <p class="kicker">GRAND THEFT AUTO VI · PLAYSTATION 5 · OFFLINE GUIDE</p>
+    <h1>GTA VI Trophy Atlas</h1>
+    <p class="tagline">All <strong>55 trophies</strong> — 1 platinum, 2 gold, 6 silver, 46 bronze — each with its official name, description and grade, a guide in our own words, and the sources that guide cites. Works with the network off.</p>
+  </div>
+  <div class="scorecard" aria-label="Your progress">
+    <p class="bigcount"><span id="earned-count">0</span><span class="of"> / 55 earned</span></p>
+    <div class="bar" role="progressbar" aria-label="Trophies earned"><div id="bar-fill"></div></div>
+    <p id="grade-line" class="muted">Platinum 0/1 · Gold 0/2 · Silver 0/6 · Bronze 0/46</p>
+    <p id="next-line" class="nextline">Next up: finish Gone Fishing, then meditate on the Chapter 1 balcony.</p>
+  </div>
 </header>
-<div class="controls">
-  <label>Grade <select id="grade"><option value="all">All</option><option value="platinum">Platinum</option><option value="gold">Gold</option><option value="silver">Silver</option><option value="bronze">Bronze</option></select></label>
-  <button id="export" type="button">Export progress</button>
-  <label class="import">Import progress <input id="import" type="file" accept="application/json"></label>
-</div>
-<table>
-  <thead><tr><th>Earned</th><th>Trophy</th><th>Grade</th><th>How to get it</th></tr></thead>
-  <tbody id="rows"></tbody>
-</table>
-<script type="module" src="app.js"></script>
+
+<nav class="tabs" aria-label="Sections">
+  <button type="button" class="tab is-active" data-view="checklist">Checklist & guides</button>
+  <button type="button" class="tab" data-view="roadmap">Roadmap to platinum</button>
+  <button type="button" class="tab" data-view="missables">Missables</button>
+  <button type="button" class="tab" data-view="planner">Next up planner</button>
+  <button type="button" class="tab" data-view="save">Save & settings</button>
+</nav>
+
+<main>
+  <section id="view-checklist" class="view">
+    <div class="controls" aria-label="Filters">
+      <label class="search">Search <input id="search" type="search" placeholder="trophy, mission, place…" autocomplete="off"></label>
+      <label>Grade
+        <select id="grade-filter">
+          <option value="all">All grades</option>
+          <option value="platinum">Platinum</option>
+          <option value="gold">Gold</option>
+          <option value="silver">Silver</option>
+          <option value="bronze">Bronze</option>
+        </select>
+      </label>
+      <label class="check"><input id="hide-earned" type="checkbox"> Hide earned</label>
+      <label class="check"><input id="spoiler-toggle" type="checkbox" checked> Spoiler shield: hide story trophies until earned</label>
+    </div>
+    <div class="chips" id="kind-chips" aria-label="Filter by kind">
+      <button type="button" class="chip is-active" data-kind="all">All 55</button>
+      <button type="button" class="chip" data-kind="story">Story</button>
+      <button type="button" class="chip" data-kind="missable">Missable</button>
+      <button type="button" class="chip" data-kind="collectibles">Collectibles</button>
+      <button type="button" class="chip" data-kind="activities">Activities</button>
+      <button type="button" class="chip" data-kind="side">Side strands</button>
+      <button type="button" class="chip" data-kind="world">World & crime</button>
+      <button type="button" class="chip" data-kind="online">Online (0)</button>
+    </div>
+    <p id="online-note" class="note" hidden>The official list has <strong>no online trophies</strong> — all 55 are single-player, so this filter is empty on purpose. Sources: official list on Exophase; PowerPyx roadmap (“Online Trophies: 0”).</p>
+    <p id="result-line" class="muted"></p>
+    <div class="layout">
+      <ol id="trophy-list" class="trophy-list"></ol>
+      <article id="detail" class="detail" aria-label="Trophy guide"></article>
+    </div>
+  </section>
+
+  <section id="view-roadmap" class="view" hidden>
+    <h2>Roadmap to the platinum</h2>
+    <p class="lede">Built from the official descriptions — which chapters and missions, which collectibles and counts, in what order — and the roadmap structure the cited guides measured at launch: one playthrough, no difficulty setting, no online trophies, about 200 hours, difficulty 4/10. Sources: PowerPyx Trophy Guide & Roadmap; GTABase 100% checklist; Push Square Trophy Guide.</p>
+    <div id="roadmap-steps"></div>
+    <h3>Rules that protect the run</h3>
+    <ul class="rules">
+      <li><strong>Manual save at every chapter start, and one before the final mission.</strong> There is no mission replay, so saves are your only way back. (PowerPyx; GTABase)</li>
+      <li><strong>Do the Chapter 1 balcony meditation before Chapter 1 ends.</strong> It is the one reported missable in the whole list — see Missables.</li>
+      <li><strong>Cheats off for a trophy run.</strong> Launch guides report that turning on a cheat disables trophies and saving. (GTABase; PowerPyx via GTA-Zone summary)</li>
+      <li><strong>Collect as you travel.</strong> Scan vehicles, study animals, grab cards and clear WAiNK spots during the story — the 100% checklist counts all of it later.</li>
+    </ul>
+  </section>
+
+  <section id="view-missables" class="view" hidden>
+    <h2>Missables — flagged from the official descriptions</h2>
+    <p class="lede">A trophy is flagged here only where its official description points at a one-time window, or a cited guide reports one. Everything else is labelled honestly instead of being dressed up as missable.</p>
+    <div id="missable-list"></div>
+    <h3>Protected by a save, not truly missable</h3>
+    <p>Every story trophy unlocks automatically when its named mission or chapter is completed, and guides report story trophies cannot be missed. They are still listed in the checklist with their chapter, because with no mission replay a per-chapter manual save is cheap insurance — and the final-mission save protects the choice-shaped trophies near the end, such as Actions Speak Louder (“Choices made (for better or worse)”).</p>
+    <h3>Partner trophies — do them while both heroes are around</h3>
+    <p>Hot Together and Retail Therapy both say “with your partner” in their official descriptions. Attempt them in free roam while both protagonists are available and together, rather than assuming a post-story moment will suit them.</p>
+  </section>
+
+  <section id="view-planner" class="view" hidden>
+    <h2>Next up planner</h2>
+    <p class="lede">The shortest honest path from where you are: the planner reads your saved progress and queues unearned trophies in roadmap order — missable first, then story, then checklist counters, then strands and clean-up.</p>
+    <ol id="planner-list" class="planner-list"></ol>
+  </section>
+
+  <section id="view-save" class="view" hidden>
+    <h2>Save, export & settings</h2>
+    <p>Progress lives only in this browser (localStorage): earned ticks, counters, notes and settings. Nothing is sent anywhere — this app makes no network request.</p>
+    <div class="save-actions">
+      <button type="button" id="demo-btn">Load demo progress (13 of 55 earned)</button>
+      <button type="button" id="export-btn">Export progress (.json)</button>
+      <label class="import-btn">Import progress <input id="import-file" type="file" accept="application/json,.json"></label>
+      <button type="button" id="reset-btn">Reset all progress</button>
+    </div>
+    <p id="save-status" class="muted" role="status"></p>
+    <h3>Settings</h3>
+    <label class="check"><input id="spoiler-toggle-2" type="checkbox" checked> Spoiler shield: hide story trophy names & descriptions until earned</label>
+    <h3>Sources for the whole atlas</h3>
+    <ul id="sources-index"></ul>
+    <p class="muted">Official names, descriptions and grades are shown as PlayStation publishes them. Every other word in the guides is our own; a source is cited beside each guide, never copied. No Rockstar logo, artwork, box art or game screenshots are used — the look is this atlas's own.</p>
+  </section>
+</main>
+
+<footer>
+  <p>GTA VI Trophy Atlas — a free, open-source, offline trophy guide & tracker. Trophy data: the official PS5 list via Exophase and PSNProfiles. Guides cite PowerPyx, Push Square and GTABase where they use them.</p>
+</footer>
+
+<script type="module" src="js/main.js"></script>
 </body>
 </html>
