@@ -281,6 +281,8 @@ textarea { width: 100%; resize: vertical; }
   top: 14px;
 }
 .detail h2 { margin: 0 0 8px; font-size: 25px; line-height: 1.2; }
+.stage-line { margin: 0 0 10px; color: var(--muted); font-size: 14px; border-left: 3px solid var(--teal); padding-left: 10px; }
+.stage-line strong { color: var(--teal); }
 .detail h3 { margin: 16px 0 4px; font-size: 16px; color: var(--accent); font-family: inherit; letter-spacing: 0.01em; }
 .official { margin: 6px 0; }
 .guide-block p, .steps-block li { color: var(--text); }

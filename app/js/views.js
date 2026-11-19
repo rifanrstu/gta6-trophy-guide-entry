@@ -137,6 +137,7 @@ export function detailHTML(trophy, ctx) {
   <section class="detail" aria-label="Trophy guide">
     <p class="chip-row">${chipsFor(trophy)}</p>
     <h2>${esc(shownName(trophy, store))}</h2>
+    <p class="stage-line">On the roadmap this sits in <strong>stage ${stageOf(trophy)} of 4 — ${esc(STAGES[stageOf(trophy) - 1].title)}</strong>: ${esc(STAGES[stageOf(trophy) - 1].blurb)}</p>
     <p class="official"><span class="lbl">Official description</span>${esc(shownDescription(trophy, store))}</p>
     ${
       shielded
