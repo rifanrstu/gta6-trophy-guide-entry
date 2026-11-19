@@ -1,54 +1,51 @@
-// Leonida Ledger — tiny local preview server.
-// Serves the app/ folder that sits beside this file so the guide can be
-// opened in a desktop browser exactly as a reader would see it. It
-// answers files only: no route writes anything, and any path that tries
-// to climb out of app/ is refused.
+// serve.ts — a tiny static server for trying the guide locally.
+// Serves this repository's app/ folder and nothing else:
+//   node serve.ts            (then open http://localhost:8917)
+//   PORT=9000 node serve.ts  (a different port)
+// Standard library only, no build step, and the app it serves needs no
+// network beyond this server: every file it loads lives under app/.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { createServer } from "node:http";
-import { dirname, extname, join, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const appRoot = join(here, "app");
-const port = Number(process.env.PORT ?? "8080");
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
+const appDir = join(rootDir, 'app');
+const port = Number(process.env.PORT ?? 8917);
 
-const MIME_BY_EXTENSION: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".txt": "text/plain; charset=utf-8",
+const TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
-function resolveInsideApp(urlPath: string): string | null {
-  const decoded = decodeURIComponent(urlPath.split("?")[0]);
-  const wanted = decoded === "/" ? "/index.html" : decoded;
-  const candidate = normalize(join(appRoot, `.${wanted}`));
-  if (!candidate.startsWith(appRoot)) return null;
-  return candidate;
-}
-
-const server = createServer((request, response) => {
-  const filePath = resolveInsideApp(request.url ?? "/");
-  if (!filePath || !existsSync(filePath) || !statSync(filePath).isFile()) {
-    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    response.end("not in the ledger\n");
-    return;
+const server = createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    let rel = decodeURIComponent(url.pathname);
+    if (rel === '/') rel = '/index.html';
+    const filePath = normalize(join(appDir, rel));
+    if (!filePath.startsWith(appDir)) {
+      res.writeHead(403).end('outside the app folder');
+      return;
+    }
+    const body = await readFile(filePath);
+    res.writeHead(200, { 'content-type': TYPES[extname(filePath)] ?? 'application/octet-stream' });
+    res.end(body);
+  } catch {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('not in the app folder');
   }
-  const type =
-    MIME_BY_EXTENSION[extname(filePath).toLowerCase()] ??
-    "application/octet-stream";
-  response.writeHead(200, { "content-type": type });
-  response.end(readFileSync(filePath));
 });
 
 server.listen(port, () => {
-  console.log(`Leonida Ledger preview at http://localhost:${port}/`);
+  console.log(`Dusk Ledger is open at http://localhost:${port}`);
 });

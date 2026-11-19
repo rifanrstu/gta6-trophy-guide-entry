@@ -1,182 +1,128 @@
-// Leonida Ledger — progress store.
-// Everything a hunter records lives in one localStorage entry: which
-// trophies are earned, how far each tracked counter has climbed, the
-// private note attached to a trophy, and whether the spoiler shield is
-// raised. Export writes that entry to a file; import reads it back.
+// store.js — the player's progress: earned ticks, counter tallies and
+// private notes, kept in localStorage and exportable as one JSON file.
+// A ?demo=13 address seeds a believable mid-run ledger in memory only
+// (13 earned, two counters part-way) so screenshots show a lived-in page;
+// the seed is never written over a real save.
 
-const STORAGE_KEY = "leonida-ledger-progress-v1";
+const STORAGE_KEY = 'dusk-ledger-progress-v1';
+const DEMO_EARNED_INDEXES = [0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47, 52];
 
-export function blankProgress() {
+function blankState() {
+  return { earned: {}, counts: {}, notes: {}, spoilers: true };
+}
+
+function readSaved() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return { ...blankState(), ...parsed };
+  } catch {
+    return null;
+  }
+}
+
+function seedDemo(trophies) {
+  const state = blankState();
+  DEMO_EARNED_INDEXES.forEach((i) => {
+    if (trophies[i]) state.earned[trophies[i].name] = true;
+  });
+  const counted = trophies.filter((t) => typeof t.target === 'number' && t.target > 0);
+  if (counted[0]) state.counts[counted[0].name] = Math.ceil(counted[0].target / 2);
+  if (counted[1]) state.counts[counted[1].name] = Math.ceil(counted[1].target / 3);
+  return state;
+}
+
+export function createStore(trophies, search = '') {
+  const params = new URLSearchParams(search);
+  const wantsDemo = params.get('demo') === '13';
+  let state = readSaved();
+  let demoMode = false;
+  if (!state && wantsDemo) {
+    state = seedDemo(trophies);
+    demoMode = true;
+  }
+  if (!state) state = blankState();
+
+  function persist() {
+    if (demoMode) return; // a screenshot seed must not become someone's save
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* storage full or blocked: the page keeps working in memory */
+    }
+  }
+
   return {
-    earned: {},
-    counters: {},
-    notes: {},
-    shieldOn: true,
-  };
-}
-
-function sanitise(candidate) {
-  const clean = blankProgress();
-  if (!candidate || typeof candidate !== "object") return clean;
-  if (candidate.earned && typeof candidate.earned === "object") {
-    for (const [name, stamp] of Object.entries(candidate.earned)) {
-      if (stamp) clean.earned[name] = String(stamp);
-    }
-  }
-  if (candidate.counters && typeof candidate.counters === "object") {
-    for (const [name, value] of Object.entries(candidate.counters)) {
-      const numeric = Number(value);
-      if (Number.isFinite(numeric) && numeric >= 0) {
-        clean.counters[name] = Math.floor(numeric);
+    get spoilers() {
+      return state.spoilers !== false;
+    },
+    setSpoilers(on) {
+      state.spoilers = !!on;
+      persist();
+    },
+    isEarned(name) {
+      return !!state.earned[name];
+    },
+    toggleEarned(name) {
+      if (state.earned[name]) delete state.earned[name];
+      else state.earned[name] = true;
+      persist();
+      return !!state.earned[name];
+    },
+    earnedCount() {
+      return Object.keys(state.earned).length;
+    },
+    countOf(trophy) {
+      return Math.min(state.counts[trophy.name] || 0, trophy.target || 0);
+    },
+    setCount(trophy, value) {
+      const ceiling = trophy.target || 0;
+      const next = Math.max(0, Math.min(ceiling, Math.floor(Number(value) || 0)));
+      if (next > 0) state.counts[trophy.name] = next;
+      else delete state.counts[trophy.name];
+      if (next >= ceiling && ceiling > 0) state.earned[trophy.name] = true;
+      persist();
+      return next;
+    },
+    noteOf(name) {
+      return state.notes[name] || '';
+    },
+    setNote(name, text) {
+      const clean = String(text || '').slice(0, 2000);
+      if (clean.trim()) state.notes[name] = clean;
+      else delete state.notes[name];
+      persist();
+    },
+    exportJSON() {
+      return JSON.stringify(
+        { app: 'dusk-ledger', version: 1, exportedAt: new Date().toISOString(), progress: state },
+        null,
+        2,
+      );
+    },
+    importJSON(text) {
+      const parsed = JSON.parse(text);
+      const incoming = parsed && parsed.progress ? parsed.progress : parsed;
+      if (!incoming || typeof incoming !== 'object') throw new Error('That file holds no progress object.');
+      state = {
+        earned: incoming.earned && typeof incoming.earned === 'object' ? incoming.earned : {},
+        counts: incoming.counts && typeof incoming.counts === 'object' ? incoming.counts : {},
+        notes: incoming.notes && typeof incoming.notes === 'object' ? incoming.notes : {},
+        spoilers: incoming.spoilers !== false,
+      };
+      demoMode = false;
+      persist();
+    },
+    reset() {
+      state = blankState();
+      demoMode = false;
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* nothing to remove */
       }
-    }
-  }
-  if (candidate.notes && typeof candidate.notes === "object") {
-    for (const [name, note] of Object.entries(candidate.notes)) {
-      if (typeof note === "string" && note.trim()) {
-        clean.notes[name] = note;
-      }
-    }
-  }
-  clean.shieldOn = candidate.shieldOn !== false;
-  return clean;
-}
-
-export function loadProgress() {
-  try {
-    const rawText = window.localStorage.getItem(STORAGE_KEY);
-    if (!rawText) return blankProgress();
-    return sanitise(JSON.parse(rawText));
-  } catch {
-    return blankProgress();
-  }
-}
-
-export function saveProgress(progress) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
-  } catch {
-    // Storage can be unavailable in strict privacy modes; the guide
-    // still works for the session, it simply cannot remember.
-  }
-}
-
-export function isEarned(progress, trophy) {
-  return Boolean(progress.earned[trophy.name]);
-}
-
-export function toggleEarned(progress, trophy) {
-  if (progress.earned[trophy.name]) {
-    delete progress.earned[trophy.name];
-  } else {
-    progress.earned[trophy.name] = new Date().toISOString();
-    if (trophy.target) {
-      progress.counters[trophy.name] = trophy.target;
-    }
-  }
-  saveProgress(progress);
-}
-
-export function counterValue(progress, trophy) {
-  const stored = progress.counters[trophy.name];
-  if (typeof stored === "number") return stored;
-  return isEarned(progress, trophy) && trophy.target ? trophy.target : 0;
-}
-
-export function setCounter(progress, trophy, value) {
-  const clamped = Math.max(
-    0,
-    Math.min(trophy.target ?? Number.MAX_SAFE_INTEGER, Math.floor(value) || 0),
-  );
-  progress.counters[trophy.name] = clamped;
-  if (trophy.target && clamped >= trophy.target) {
-    if (!progress.earned[trophy.name]) {
-      progress.earned[trophy.name] = new Date().toISOString();
-    }
-  }
-  saveProgress(progress);
-  return clamped;
-}
-
-export function noteFor(progress, trophy) {
-  return progress.notes[trophy.name] ?? "";
-}
-
-export function setNote(progress, trophy, text) {
-  if (text.trim()) {
-    progress.notes[trophy.name] = text;
-  } else {
-    delete progress.notes[trophy.name];
-  }
-  saveProgress(progress);
-}
-
-export function earnedCount(progress, trophies) {
-  return trophies.filter((trophy) => isEarned(progress, trophy)).length;
-}
-
-export function completionPercent(progress, trophies) {
-  if (!trophies.length) return 0;
-  return Math.round((earnedCount(progress, trophies) / trophies.length) * 100);
-}
-
-export function exportProgress(progress) {
-  const payload = {
-    app: "leonida-ledger",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    progress,
+    },
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json",
-  });
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(blob);
-  anchor.download = "leonida-ledger-progress.json";
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(anchor.href), 4000);
-}
-
-export function importProgress(file) {
-  return file.text().then((text) => {
-    const parsed = JSON.parse(text);
-    const inner =
-      parsed && typeof parsed === "object" && parsed.progress
-        ? parsed.progress
-        : parsed;
-    const clean = sanitise(inner);
-    saveProgress(clean);
-    return clean;
-  });
-}
-
-export function summaryLine(progress, trophies) {
-  const earned = earnedCount(progress, trophies);
-  const percent = completionPercent(progress, trophies);
-  const remaining = trophies.length - earned;
-  return (
-    `Leonida Ledger: ${earned} of ${trophies.length} GTA VI trophies earned ` +
-    `(${percent}%), ${remaining} still open. Roadmap, missable check and ` +
-    `planner all live in the GTA VI Trophy Atlas.`
-  );
-}
-
-// Demo seeding exists for screenshots and first impressions only: when
-// the address carries ?demo=13 and nothing is saved yet, a believable
-// mid-run ledger appears (thirteen earned, two counters under way).
-export function seedDemoProgress(trophies) {
-  const demo = blankProgress();
-  const chosen = trophies.slice(0, 13);
-  for (const trophy of chosen) {
-    demo.earned[trophy.name] = "2026-11-19T12:00:00.000Z";
-    if (trophy.target) demo.counters[trophy.name] = trophy.target;
-  }
-  const partial = trophies.filter(
-    (trophy) => trophy.target && !demo.earned[trophy.name],
-  );
-  for (const trophy of partial.slice(0, 2)) {
-    demo.counters[trophy.name] = Math.max(1, Math.floor(trophy.target / 3));
-  }
-  demo.shieldOn = true;
-  return demo;
 }

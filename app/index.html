@@ -1,25 +1,43 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GTA VI Trophy Atlas — The Leonida Ledger</title>
-<meta name="description" content="An offline guide and tracker for all 55 Grand Theft Auto VI PlayStation 5 trophies: checklist with saved progress, a four-stage platinum roadmap, the missable watch, and a guide to each trophy that cites its sources.">
+<title>Dusk Ledger — GTA VI Trophy Guide and Tracker</title>
+<meta name="description" content="An offline guide and tracker for all 55 Grand Theft Auto VI PlayStation 5 trophies: checklist, roadmap, missables and a cited guide to each.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="lx-shell" id="app-shell">
-  <div id="ledger-root">
-    <p class="lx-load-note" id="loading-note">Opening the ledger… if this stays, the trophy data file could not be read.</p>
+<header id="masthead">
+  <div class="mast-row">
+    <div class="brand">
+      <p class="brand-kicker">Grand Theft Auto VI · PlayStation 5</p>
+      <h1>Dusk Ledger</h1>
+      <p class="brand-sub">Every one of the 55 official trophies, guided and tracked — offline, from this folder alone.</p>
+    </div>
+    <div class="mast-progress">
+      <p class="big-count"><span id="earned-count">0</span><span class="of"> / 55 earned</span></p>
+      <div class="bar" role="progressbar" aria-label="Trophies earned"><div id="earned-bar"></div></div>
+      <p id="grade-line" class="grade-line">1 platinum · 2 gold · 6 silver · 46 bronze</p>
+    </div>
   </div>
-  <footer class="lx-footer" id="colophon">
-    <p>Built from the official PlayStation trophy list as published by Exophase and PSNProfiles.
-    Guide text is original to this entry and cites its sources beside each trophy.
-    No Rockstar Games logo, artwork or game imagery is used. Works fully offline:
-    every file this page loads ships inside the app folder.</p>
-  </footer>
-</div>
-<noscript><p>This guide needs JavaScript: the checklist, filters and saved progress are all local scripts.</p></noscript>
+  <nav id="tabs" aria-label="Guide sections">
+    <button type="button" data-tab="checklist" class="tab is-on">Checklist</button>
+    <button type="button" data-tab="roadmap" class="tab">Roadmap</button>
+    <button type="button" data-tab="missables" class="tab">Missables</button>
+    <button type="button" data-tab="next" class="tab">Next up</button>
+    <button type="button" data-tab="save" class="tab">Save</button>
+  </nav>
+</header>
+
+<main id="view" aria-live="polite">
+  <p class="loading">Opening the ledger…</p>
+</main>
+
+<footer id="colophon">
+  <p>Names, descriptions and grades are the official PlayStation list as published by Exophase; progress targets follow PSNProfiles. Every guide here is our own wording and says where its facts come from. No Rockstar artwork, no network calls: close the Wi-Fi and this page still works.</p>
+</footer>
+
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

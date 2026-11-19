@@ -1,391 +1,329 @@
-// Leonida Ledger — views.
-// Pure renderers: each takes the catalogue, the saved progress and the
-// current screen state, and returns the HTML for one region of the
-// page. No view touches storage or the network; main.js wires events.
+// views.js — every screen of the ledger as an HTML string. Pure builders:
+// they read the trophies and the store and hand markup back; main.js wires
+// the events. Trophy text is always escaped before it reaches the page.
 
 import {
-  CONFIDENCE_MEANING,
+  GRADE_FILTERS,
   GRADE_LABEL,
-  GRADE_SEQUENCE,
+  KIND_FILTERS,
   KIND_LABEL,
-  ROAD_STAGES,
-  catalogueSummary,
-  stageIndexFor,
-  trophiesInStage,
-} from "./data.js";
-import {
-  completionPercent,
-  counterValue,
-  earnedCount,
-  isEarned,
-  noteFor,
-} from "./store.js";
+  STAGES,
+  bucketsOf,
+  countByGrade,
+  gradeRank,
+  hasTarget,
+  sourcesText,
+  stageOf,
+} from './data.js';
 
 export function esc(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
-export function shielded(progress, trophy) {
-  return (
-    progress.shieldOn &&
-    trophy.kind === "story" &&
-    !isEarned(progress, trophy)
-  );
+// The spoiler shield: with spoilers on, an unearned story trophy shows
+// neither its name nor its description — just that something waits there.
+export function isShielded(trophy, store) {
+  return store.spoilers && trophy.kind === 'story' && !store.isEarned(trophy.name);
 }
 
-function displayName(progress, trophy) {
-  return shielded(progress, trophy) ? "— story trophy, still shielded —" : trophy.name;
+function shownName(trophy, store) {
+  return isShielded(trophy, store) ? 'A story trophy, still hidden' : trophy.name;
 }
 
-function displayDescription(progress, trophy) {
-  if (shielded(progress, trophy)) {
-    return "Description hidden by the spoiler shield until this trophy is earned.";
-  }
-  return trophy.description;
+function shownDescription(trophy, store) {
+  return isShielded(trophy, store)
+    ? 'Shielded by the spoiler setting. Earn it in the story — or switch spoilers off in the checklist — to read what PlayStation says about it.'
+    : trophy.description;
 }
 
-export function gradeChip(trophy) {
-  return `<span class="lx-grade lx-grade-${esc(trophy.grade)}">${esc(GRADE_LABEL[trophy.grade])}</span>`;
+function medalSpan(trophy) {
+  return `<span class="medal medal-${esc(trophy.grade)}" title="${esc(GRADE_LABEL[trophy.grade] || trophy.grade)}"></span>`;
 }
 
-export function kindChip(trophy) {
-  return `<span class="lx-kind">${esc(KIND_LABEL[trophy.kind] ?? trophy.kind)}</span>`;
-}
-
-export function confidenceChip(trophy) {
-  return `<span class="lx-confidence" title="${esc(CONFIDENCE_MEANING[trophy.confidence] ?? "")}">${esc(trophy.confidence)}</span>`;
-}
-
-export function headerView(trophies, progress) {
-  const summary = catalogueSummary(trophies);
-  const earned = earnedCount(progress, trophies);
-  const percent = completionPercent(progress, trophies);
-  const gradeBits = GRADE_SEQUENCE.map(
-    (grade) => `${summary.byGrade[grade]} ${GRADE_LABEL[grade].toLowerCase()}`,
-  ).join(" · ");
-  return `
-    <div class="lx-masthead" id="masthead">
-      <div class="lx-masthead-copy">
-        <p class="lx-eyebrow">GTA VI Trophy Atlas — offline guide &amp; tracker</p>
-        <h1 class="lx-title">The Leonida Ledger</h1>
-        <p class="lx-standfirst">Every one of the ${summary.total} official PlayStation 5 trophies
-        (${gradeBits}), each with a guide in our own words,
-        the sources it rests on, a three-step breakdown, a timing note and an honesty badge.
-        Progress saves in this browser; the page never touches the network.</p>
-      </div>
-      <div class="lx-scorebox" id="scorebox">
-        <span class="lx-score-number">${earned}</span>
-        <span class="lx-score-of">of ${summary.total} earned</span>
-        <div class="lx-progress-track"><div class="lx-progress-fill" style="width:${percent}%"></div></div>
-        <span class="lx-score-percent">${percent}% of the book</span>
-      </div>
-    </div>`;
-}
-
-export function navView(activeView) {
-  const tabs = [
-    ["guide", "Guide & checklist"],
-    ["roadmap", "Platinum roadmap"],
-    ["missables", "Missable watch"],
-    ["planner", "Next up"],
-    ["save", "Save & share"],
+function chipsFor(trophy) {
+  const parts = [
+    `<span class="chip chip-grade-${esc(trophy.grade)}">${esc(GRADE_LABEL[trophy.grade] || trophy.grade)}</span>`,
+    `<span class="chip">${esc(KIND_LABEL[trophy.kind] || trophy.kind || 'Trophy')}</span>`,
+    `<span class="chip chip-stage">Roadmap stage ${stageOf(trophy)} of 4</span>`,
   ];
-  const links = tabs
-    .map(
-      ([id, label]) =>
-        `<a class="lx-tab${id === activeView ? " lx-tab-active" : ""}" href="#${id}" data-view-link="${id}">${label}</a>`,
-    )
-    .join("");
-  return `<nav class="lx-tabs" id="view-tabs">${links}</nav>`;
+  if (trophy.missable) parts.push('<span class="chip chip-miss">Missable</span>');
+  if (trophy.hidden) parts.push('<span class="chip chip-hidden">Hidden on PSN</span>');
+  return parts.join(' ');
 }
 
-function filterBarView(trophies, ui) {
-  const kindOptions = ["all", ...Object.keys(KIND_LABEL)]
-    .map(
-      (kind) =>
-        `<option value="${kind}"${ui.kind === kind ? " selected" : ""}>${kind === "all" ? "Every kind" : KIND_LABEL[kind]}</option>`,
-    )
-    .join("");
-  const gradeOptions = ["all", ...GRADE_SEQUENCE]
-    .map(
-      (grade) =>
-        `<option value="${grade}"${ui.grade === grade ? " selected" : ""}>${grade === "all" ? "Every grade" : GRADE_LABEL[grade]}</option>`,
-    )
-    .join("");
-  const stateOptions = [
-    ["all", "Earned and open"],
-    ["open", "Still open"],
-    ["earned", "Earned only"],
-  ]
-    .map(
-      ([value, label]) =>
-        `<option value="${value}"${ui.state === value ? " selected" : ""}>${label}</option>`,
-    )
-    .join("");
-  return `
-    <div class="lx-filterbar" id="filterbar">
-      <label class="lx-field">Search
-        <input id="filter-search" type="search" placeholder="Trophy name or words…" value="${esc(ui.search)}">
-      </label>
-      <label class="lx-field">Kind
-        <select id="filter-kind">${kindOptions}</select>
-      </label>
-      <label class="lx-field">Grade
-        <select id="filter-grade">${gradeOptions}</select>
-      </label>
-      <label class="lx-field">State
-        <select id="filter-state">${stateOptions}</select>
-      </label>
-      <label class="lx-shield-toggle">
-        <input id="toggle-shield" type="checkbox" ${ui.shieldOn ? "checked" : ""}>
-        Spoiler shield: mask unearned story trophies
-      </label>
-    </div>`;
-}
-
-export function matchesFilters(trophy, progress, ui) {
-  if (ui.kind !== "all" && trophy.kind !== ui.kind) return false;
-  if (ui.grade !== "all" && trophy.grade !== ui.grade) return false;
-  if (ui.state === "earned" && !isEarned(progress, trophy)) return false;
-  if (ui.state === "open" && isEarned(progress, trophy)) return false;
-  const needle = ui.search.trim().toLowerCase();
-  if (needle) {
-    const haystack = `${trophy.name} ${trophy.description} ${trophy.guide}`.toLowerCase();
-    if (!haystack.includes(needle)) return false;
+export function matchesFilters(trophy, ui, store) {
+  if (ui.grade !== 'all' && trophy.grade !== ui.grade) return false;
+  if (ui.kind !== 'all' && !bucketsOf(trophy).has(ui.kind)) return false;
+  if (ui.query) {
+    const hay = `${shownName(trophy, store)} ${trophy.description} ${trophy.kind}`.toLowerCase();
+    if (!hay.includes(ui.query.toLowerCase())) return false;
   }
   return true;
 }
 
-function checklistRow(trophy, progress, ui) {
-  const earned = isEarned(progress, trophy);
-  const selected = ui.selected === trophy.name;
-  const counter = trophy.target
-    ? `<span class="lx-row-counter">${counterValue(progress, trophy)}/${trophy.target}</span>`
-    : "";
-  const missableFlag = trophy.missable
-    ? `<span class="lx-row-missable">missable</span>`
-    : "";
+function filterBarHTML(ctx) {
+  const { ui, store } = ctx;
+  const gradeChips = GRADE_FILTERS.map(
+    (f) =>
+      `<button type="button" class="fchip${ui.grade === f.id ? ' is-on' : ''}" data-action="grade" data-value="${f.id}">${f.label}</button>`,
+  ).join('');
+  const kindOptions = KIND_FILTERS.map(
+    (f) => `<option value="${f.id}"${ui.kind === f.id ? ' selected' : ''}>${f.label}</option>`,
+  ).join('');
   return `
-    <li class="lx-row${earned ? " lx-row-earned" : ""}${selected ? " lx-row-selected" : ""}">
-      <label class="lx-row-check">
-        <input type="checkbox" data-action="toggle-earned" data-name="${esc(trophy.name)}" ${earned ? "checked" : ""}>
+  <section class="filterbar" aria-label="Checklist filters">
+    <div class="fgroup" role="group" aria-label="Filter by grade">${gradeChips}</div>
+    <div class="fgroup fgroup-right">
+      <label class="ffield">Kind
+        <select id="kind-select" data-action-select="kind">${kindOptions}</select>
       </label>
-      <button class="lx-row-main" type="button" data-action="select" data-name="${esc(trophy.name)}">
-        <span class="lx-row-name">${esc(displayName(progress, trophy))}</span>
-        <span class="lx-row-desc">${esc(displayDescription(progress, trophy))}</span>
-        <span class="lx-row-meta">${gradeChip(trophy)} ${kindChip(trophy)} ${missableFlag} ${counter}</span>
-      </button>
-    </li>`;
+      <label class="ffield fsearch">Search
+        <input id="search-box" type="search" placeholder="Name, description, kind…" value="${esc(ui.query)}">
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="spoiler-toggle" data-action-check="spoilers"${store.spoilers ? ' checked' : ''}>
+        Hide story spoilers
+      </label>
+    </div>
+  </section>`;
 }
 
-export function detailView(trophy, progress) {
-  if (!trophy) {
-    return `
-      <aside class="lx-detail lx-detail-empty" id="detail-pane">
-        <h2>Pick a trophy</h2>
-        <p>Select any row and its full guide opens here: the cited sources,
-        the three-step breakdown, when to attempt it, and the badge that
-        says how far the facts behind it have been checked.</p>
-      </aside>`;
-  }
-  const earned = isEarned(progress, trophy);
-  const steps = trophy.steps
-    .map((step, index) => `<li><strong>Step ${index + 1}.</strong> ${esc(step)}</li>`)
-    .join("");
-  const sources = trophy.sources.length
-    ? trophy.sources.map((source) => `<li>${esc(source)}</li>`).join("")
-    : "<li>Sources: the official list on Exophase for the name, description and grade; PSNProfiles for the tracked target where one exists; the guide text is our own advice drawn from the official description.</li>";
-  const counterBlock = trophy.target
+function rowHTML(trophy, ctx) {
+  const { store, ui } = ctx;
+  const earned = store.isEarned(trophy.name);
+  const counter = hasTarget(trophy)
+    ? `<span class="row-count">${store.countOf(trophy)} / ${trophy.target} ${esc(trophy.targetLabel || '')}</span>`
+    : '';
+  return `
+  <li>
+    <button type="button" class="trow${earned ? ' is-earned' : ''}${ui.selected === trophy.name ? ' is-selected' : ''}" data-action="select" data-name="${esc(trophy.name)}">
+      ${medalSpan(trophy)}
+      <span class="row-main">
+        <span class="row-name">${esc(shownName(trophy, store))}</span>
+        <span class="row-desc">${esc(shownDescription(trophy, store))}</span>
+      </span>
+      <span class="row-side">
+        ${trophy.missable ? '<span class="chip chip-miss">Missable</span>' : ''}
+        ${counter}
+        <span class="row-tick" aria-hidden="true">${earned ? '✓' : ''}</span>
+      </span>
+    </button>
+  </li>`;
+}
+
+export function detailHTML(trophy, ctx) {
+  const { store } = ctx;
+  if (!trophy) return '<section class="detail"><p class="muted">Pick a trophy from the list and its guide opens here.</p></section>';
+  const earned = store.isEarned(trophy.name);
+  const shielded = isShielded(trophy, store);
+  const steps = Array.isArray(trophy.steps) ? trophy.steps : [];
+  const counterBlock = hasTarget(trophy)
     ? `
-      <div class="lx-counter-box">
-        <span>Tracked count: ${counterValue(progress, trophy)} of ${trophy.target}</span>
-        <span class="lx-counter-buttons">
-          <button type="button" data-action="counter-step" data-name="${esc(trophy.name)}" data-delta="-1">−1</button>
-          <button type="button" data-action="counter-step" data-name="${esc(trophy.name)}" data-delta="1">+1</button>
-          <button type="button" data-action="counter-step" data-name="${esc(trophy.name)}" data-delta="10">+10</button>
-        </span>
+      <div class="counter-box">
+        <p class="counter-head">Progress counter — <strong>${store.countOf(trophy)} / ${trophy.target}</strong> ${esc(trophy.targetLabel || '')}</p>
+        <div class="bar"><div style="width:${Math.round((store.countOf(trophy) / trophy.target) * 100)}%"></div></div>
+        <p class="counter-controls">
+          <button type="button" class="btn" data-action="count-down">−1</button>
+          <input type="number" class="count-input" data-count-input min="0" max="${trophy.target}" value="${store.countOf(trophy)}" aria-label="Set the counter">
+          <button type="button" class="btn" data-action="count-up">+1</button>
+        </p>
       </div>`
-    : "";
+    : '';
   return `
-    <aside class="lx-detail" id="detail-pane">
-      <p class="lx-detail-kicker">${gradeChip(trophy)} ${kindChip(trophy)} ${confidenceChip(trophy)} <span class="lx-kind">Roadmap stage ${stageIndexFor(trophy) + 1} of ${ROAD_STAGES.length}</span></p>
-      <h2 class="lx-detail-name">${esc(displayName(progress, trophy))}</h2>
-      <p class="lx-detail-desc">${esc(displayDescription(progress, trophy))}</p>
-      ${trophy.missable ? `<p class="lx-detail-missable">Missable — protect this one with a spare save before its chapter.</p>` : ""}
-      <p class="lx-detail-timing">${esc(trophy.timing)}</p>
-      <h3>Guide, in our own words</h3>
-      <p class="lx-detail-guide">${esc(trophy.guide)}</p>
-      <h3>Three-step breakdown</h3>
-      <ol class="lx-steps">${steps}</ol>
-      ${counterBlock}
-      <h3>Sources beside this guide</h3>
-      <ul class="lx-sources">${sources}</ul>
-      <p class="lx-confidence-note">${esc(CONFIDENCE_MEANING[trophy.confidence] ?? "")}</p>
-      <label class="lx-note-field">Your note on this trophy
-        <textarea id="note-editor" data-name="${esc(trophy.name)}" rows="3" placeholder="Where you found it, what nearly went wrong…">${esc(noteFor(progress, trophy))}</textarea>
-      </label>
-      <button class="lx-earn-button" type="button" data-action="toggle-earned" data-name="${esc(trophy.name)}">
-        ${earned ? "Mark as not earned" : "Mark as earned"}
-      </button>
-    </aside>`;
+  <section class="detail" aria-label="Trophy guide">
+    <p class="chip-row">${chipsFor(trophy)}</p>
+    <h2>${esc(shownName(trophy, store))}</h2>
+    <p class="official"><span class="lbl">Official description</span>${esc(shownDescription(trophy, store))}</p>
+    ${
+      shielded
+        ? '<p class="muted">The guide for this one stays under the same shield: it would quote the moment it is earned in.</p>'
+        : `
+    <div class="guide-block">
+      <h3>The guide</h3>
+      <p>${esc(trophy.guide)}</p>
+    </div>
+    <div class="steps-block">
+      <h3>Step by step</h3>
+      <ol>${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+    </div>
+    <p class="timing"><span class="lbl">Timing</span>${esc(trophy.timing || 'No special window: it can be earned whenever its condition is met.')}</p>
+    <p class="confidence">Confidence <span class="badge">${esc(trophy.confidence || 'Medium')}</span></p>
+    <p class="sources"><span class="lbl">Sources</span>${esc(sourcesText(trophy))}; the guide above is our own advice, written from the official description and not yet checked in the game.</p>
+    ${counterBlock}
+    <label class="note-label" for="note-box">Your note</label>
+    <textarea id="note-box" data-note rows="3" placeholder="Where you left this, what to try next…">${esc(store.noteOf(trophy.name))}</textarea>`
+    }
+    <p class="detail-actions">
+      <button type="button" class="btn ${earned ? 'btn-quiet' : 'btn-main'}" data-action="toggle-earned">${earned ? 'Earned ✓ — tap to undo' : 'Mark as earned'}</button>
+    </p>
+  </section>`;
 }
 
-export function guideView(trophies, progress, ui) {
-  const visible = trophies.filter((trophy) => matchesFilters(trophy, progress, ui));
-  const selected =
-    trophies.find((trophy) => trophy.name === ui.selected) ?? visible[0] ?? null;
-  const rows = visible.map((trophy) => checklistRow(trophy, progress, ui)).join("");
+export function checklistHTML(ctx) {
+  const { trophies, ui } = ctx;
+  const visible = trophies.filter((t) => matchesFilters(t, ui, ctx.store));
+  const selected = trophies.find((t) => t.name === ui.selected) || visible[0] || trophies[0];
   return `
-    ${filterBarView(trophies, ui)}
-    <div class="lx-guide-grid">
-      <section class="lx-list-pane" id="checklist">
-        <p class="lx-list-count">${visible.length} of ${trophies.length} trophies shown</p>
-        <ul class="lx-rows">${rows || `<li class="lx-row">No trophy matches those filters.</li>`}</ul>
-      </section>
-      ${detailView(selected, progress)}
-    </div>`;
+  ${filterBarHTML(ctx)}
+  <div class="layout">
+    <section class="list-pane" aria-label="Trophy checklist">
+      <p class="list-meta">${visible.length} of ${trophies.length} trophies shown · tick progress is saved in this browser as you go.</p>
+      <ul class="tlist">${visible.map((t) => rowHTML(t, ctx)).join('') || '<li class="muted pad">No trophy matches those filters.</li>'}</ul>
+    </section>
+    ${detailHTML(selected, ctx)}
+  </div>`;
 }
 
-function stageBlock(trophies, progress, stage, index) {
-  const members = trophiesInStage(trophies, index);
-  const done = members.filter((trophy) => isEarned(progress, trophy)).length;
-  const pct = members.length ? Math.round((done / members.length) * 100) : 0;
-  const names = members
-    .slice(0, 6)
-    .map((trophy) => `<li>${esc(displayName(progress, trophy))}</li>`)
-    .join("");
-  const more =
-    members.length > 6 ? `<li>…and ${members.length - 6} more in the checklist</li>` : "";
-  return `
-    <article class="lx-stage" id="stage-${esc(stage.id)}">
+function stageMembers(trophies, n) {
+  return trophies.filter((t) => stageOf(t) === n);
+}
+
+export function roadmapHTML(ctx) {
+  const { trophies, store } = ctx;
+  const sections = STAGES.map((stage) => {
+    const members = stageMembers(trophies, stage.n);
+    const done = members.filter((t) => store.isEarned(t.name)).length;
+    const pct = members.length ? Math.round((done / members.length) * 100) : 0;
+    const names = members
+      .map(
+        (t) =>
+          `<li class="${store.isEarned(t.name) ? 'done' : ''}">${medalSpan(t)} ${esc(shownName(t, store))}${t.missable ? ' <span class="chip chip-miss">Missable</span>' : ''}</li>`,
+      )
+      .join('');
+    return `
+    <section class="stage-card">
+      <p class="stage-kicker">Stage ${stage.n} of 4 · ${done} of ${members.length} earned</p>
       <h2>${esc(stage.title)}</h2>
       <p>${esc(stage.blurb)}</p>
-      <div class="lx-progress-track"><div class="lx-progress-fill" style="width:${pct}%"></div></div>
-      <p class="lx-stage-progress">${done} of ${members.length} earned (${pct}%)</p>
-      <ul class="lx-stage-names">${names}${more}</ul>
-      <p class="lx-stage-watch">${esc(stage.watchOut)}</p>
-    </article>`;
-}
-
-export function roadmapView(trophies, progress) {
-  const blocks = ROAD_STAGES.map((stage, index) =>
-    stageBlock(trophies, progress, stage, index),
-  ).join("");
-  return `
-    <section class="lx-page" id="roadmap-page">
-      <h2 class="lx-page-title">Roadmap to the platinum</h2>
-      <p class="lx-page-lede">Four stages, built from the official descriptions: the story
-      spine first, the open world in the gaps, the long tallies running underneath,
-      and a final missable check before the platinum. Your own progress is drawn
-      into every stage.</p>
-      <div class="lx-stages">${blocks}</div>
+      <div class="bar"><div style="width:${pct}%"></div></div>
+      <p class="watch"><span class="lbl">Watch out</span>${esc(stage.watch)}</p>
+      <ul class="stage-list">${names}</ul>
     </section>`;
+  }).join('');
+  return `
+  <div class="page">
+    <h2 class="page-title">The road to the platinum</h2>
+    <p class="page-lede">Four stages, in the order a first playthrough should meet them, built from the official descriptions: story first, then the threads that run beside it, then the sweeps and tallies, and the open-world residue last. The platinum — earned when the other 54 are — closes stage 4.</p>
+    ${sections}
+  </div>`;
 }
 
-export function missablesView(trophies, progress) {
-  const flagged = trophies.filter((trophy) => trophy.missable);
+export function missablesHTML(ctx) {
+  const { trophies, store } = ctx;
+  const flagged = trophies.filter((t) => t.missable);
   const cards = flagged
     .map(
-      (trophy) => `
-      <article class="lx-missable-card">
-        <p>${gradeChip(trophy)} ${confidenceChip(trophy)}</p>
-        <h3>${esc(trophy.name)}</h3>
-        <p>${esc(trophy.description)}</p>
-        <p class="lx-detail-timing">${esc(trophy.timing)}</p>
-        <p>${esc(trophy.guide)}</p>
-        <p class="lx-missable-state">${isEarned(progress, trophy) ? "Earned — this run is safe." : "Not yet earned — keep the spare save until it pops."}</p>
-      </article>`,
+      (t) => `
+    <section class="stage-card miss-card">
+      <p class="chip-row">${chipsFor(t)}</p>
+      <h2>${esc(t.name)}</h2>
+      <p class="official"><span class="lbl">Official description</span>${esc(t.description)}</p>
+      ${t.missableNote ? `<p>${esc(t.missableNote)}</p>` : ''}
+      <p class="timing"><span class="lbl">Timing</span>${esc(t.timing || '')}</p>
+      <ol>${(t.steps || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+      <p class="sources"><span class="lbl">Sources</span>${esc(sourcesText(t))}</p>
+      <p>${store.isEarned(t.name) ? '<strong>In the ledger already ✓</strong>' : '<strong>Not earned yet — its window is early, so plan for it before the story moves on.</strong>'}</p>
+    </section>`,
     )
-    .join("");
+    .join('');
   return `
-    <section class="lx-page" id="missables-page">
-      <h2 class="lx-page-title">Missable watch</h2>
-      <p class="lx-page-lede">Honesty first: from the official descriptions, exactly
-      ${flagged.length} of the ${trophies.length} trophies can be missed on a single run.
-      Inventing more would make this page longer and the guide worse, so here is
-      the one that matters, with its timing in full.</p>
-      ${cards}
-      <p class="lx-page-note">Every other trophy stays available after its unlock
-      point, or belongs to a count that keeps growing. If a future patch changes
-      that, this page — not the checklist — is where the correction belongs.</p>
-    </section>`;
+  <div class="page">
+    <h2 class="page-title">Missables: the honest count is ${flagged.length}</h2>
+    <p class="page-lede">Read strictly from the official descriptions, exactly one trophy in the list of 55 carries a window that closes: a single moment, early, that the story does not repeat. Everything else can be earned later, replayed, or swept up after the credits — we checked each description for chapter locks, one-time events and point-of-no-return language, and only this one qualifies.</p>
+    ${cards}
+    <section class="stage-card">
+      <h2>How the rest were cleared</h2>
+      <p>Story trophies sit on the critical path and pop as their scenes resolve. Collectible sets and the counted trophies stay open in free roam. Side threads can be finished after the credits. If a later patch or a fuller guide proves another window, this page — not the checklist — is where the flag belongs.</p>
+    </section>
+  </div>`;
 }
 
-function plannerReason(trophy, progress) {
-  if (trophy.missable && !isEarned(progress, trophy)) {
-    return "Missable and still open — nothing outranks protecting this.";
-  }
-  const value = counterValue(progress, trophy);
-  if (trophy.target && value > 0 && value < trophy.target) {
-    return `Counter already moving (${value}/${trophy.target}) — finish what is warm.`;
-  }
-  if (trophy.kind === "story") {
-    return "Next on the story spine; it unlocks more of the map as it lands.";
-  }
-  return `Stage ${stageIndexFor(trophy) + 1} of the roadmap — the earliest open stage first.`;
+function nextReason(trophy, store) {
+  if (hasTarget(trophy) && store.countOf(trophy) > 0)
+    return `Counter already moving: ${store.countOf(trophy)} of ${trophy.target} ${trophy.targetLabel || ''} banked.`;
+  if (trophy.missable) return 'Its only window is in Chapter 1 — the earliest unfinished business there is.';
+  if (stageOf(trophy) === 1) return 'On the story road: the next chapter carries it.';
+  if (stageOf(trophy) === 2) return 'A side thread — tidy it up while its people are still on the map.';
+  if (stageOf(trophy) === 3) return hasTarget(trophy) ? 'A tally that rewards steady sessions over one grind.' : 'Part of a collectible sweep; go district by district.';
+  return 'Open-world residue: save it for a calm free-roam session.';
 }
 
-export function plannerView(trophies, progress) {
-  const open = trophies.filter((trophy) => !isEarned(progress, trophy));
-  const ranked = [...open].sort((a, b) => {
-    const score = (trophy) =>
-      (trophy.missable ? 0 : 1) * 100 +
-      (trophy.target && counterValue(progress, trophy) > 0 ? 10 : 50) +
-      stageIndexFor(trophy) * 20 +
-      trophy.position;
-    return score(a) - score(b);
-  });
-  const picks = ranked.slice(0, 6);
-  const cards = picks
+export function nextHTML(ctx) {
+  const { trophies, store } = ctx;
+  const pending = trophies
+    .filter((t) => !store.isEarned(t.name) && t.grade !== 'platinum')
+    .map((t) => ({
+      t,
+      moving: hasTarget(t) && store.countOf(t) > 0 ? 0 : 1,
+      shielded: isShielded(t, store) ? 1 : 0,
+    }))
+    .sort(
+      (a, b) =>
+        a.moving - b.moving ||
+        a.shielded - b.shielded ||
+        stageOf(a.t) - stageOf(b.t) ||
+        gradeRank(a.t) - gradeRank(b.t) ||
+        a.t.name.localeCompare(b.t.name),
+    )
+    .slice(0, 15);
+  const rows = pending
     .map(
-      (trophy, index) => `
-      <article class="lx-pick">
-        <p class="lx-pick-rank">Next up ${index + 1} · Stage ${stageIndexFor(trophy) + 1}</p>
-        <h3>${esc(displayName(progress, trophy))}</h3>
-        <p>${gradeChip(trophy)} ${kindChip(trophy)} ${confidenceChip(trophy)}</p>
-        <p>${esc(plannerReason(trophy, progress))}</p>
-        <p class="lx-pick-timing">${esc(trophy.timing)}</p>
-      </article>`,
+      ({ t }) => `
+    <li>
+      <button type="button" class="trow" data-action="jump" data-name="${esc(t.name)}">
+        ${medalSpan(t)}
+        <span class="row-main">
+          <span class="row-name">${esc(shownName(t, store))}</span>
+          <span class="row-desc">${esc(nextReason(t, store))}</span>
+        </span>
+        <span class="row-side"><span class="chip chip-stage">Stage ${stageOf(t)}</span></span>
+      </button>
+    </li>`,
     )
-    .join("");
+    .join('');
   return `
-    <section class="lx-page" id="planner-page">
-      <h2 class="lx-page-title">Next up — a plan from your own ledger</h2>
-      <p class="lx-page-lede">Ranked from your saved progress, not from a generic list:
-      the missable first while it is open, counters that are already warm next,
-      then the earliest unfinished roadmap stage. Shielded story names stay
-      masked here too.</p>
-      <div class="lx-picks">${cards || `<p>Everything is earned. The book is closed — congratulations.</p>`}</div>
-    </section>`;
+  <div class="page">
+    <h2 class="page-title">Next up</h2>
+    <p class="page-lede">What the ledger would do next, from your own progress: counters already in motion first, then the earliest roadmap stage still open, with the heavier grades ahead of the bronze. Shielded story trophies queue by stage without spoiling themselves.</p>
+    <ul class="tlist">${rows || '<li class="muted pad">Nothing left — the platinum is yours.</li>'}</ul>
+  </div>`;
 }
 
-export function saveView(trophies, progress) {
-  const earned = earnedCount(progress, trophies);
-  const percent = completionPercent(progress, trophies);
-  const noted = Object.keys(progress.notes).length;
+export function saveHTML(ctx) {
+  const { trophies, store } = ctx;
+  const byGrade = countByGrade(trophies);
+  const earnedByGrade = countByGrade(trophies.filter((t) => store.isEarned(t.name)));
+  const gradeRows = Object.keys(byGrade)
+    .map((g) => `<li>${GRADE_LABEL[g]}: ${earnedByGrade[g]} of ${byGrade[g]} earned</li>`)
+    .join('');
   return `
-    <section class="lx-page" id="save-page">
-      <h2 class="lx-page-title">Save &amp; share</h2>
-      <p class="lx-page-lede">Your ledger lives only in this browser. Export it before
-      you clear site data or change machines; import brings the whole book back —
-      earned marks, counters, notes and the shield setting included.</p>
-      <div class="lx-save-stats">
-        <p><strong>${earned}</strong> earned of ${trophies.length} (${percent}%)</p>
-        <p><strong>${noted}</strong> trophies carry your notes</p>
-        <p>Spoiler shield is <strong>${progress.shieldOn ? "on" : "off"}</strong></p>
-      </div>
-      <div class="lx-save-actions">
-        <button type="button" data-action="export">Export progress (.json)</button>
-        <label class="lx-import-label">Import progress
-          <input id="import-file" type="file" accept="application/json,.json">
-        </label>
-        <button type="button" data-action="copy-summary">Copy progress summary</button>
-        <button type="button" data-action="reset">Reset the whole ledger</button>
-      </div>
-      <p class="lx-page-note" id="save-feedback" role="status"></p>
-    </section>`;
+  <div class="page">
+    <h2 class="page-title">Your save</h2>
+    <p class="page-lede">Progress lives in this browser's local storage — ticks, counters and notes together. Take it with you: export writes one JSON file, import reads it back on any machine, and reset clears the slate.</p>
+    <section class="stage-card">
+      <h2>Where the run stands</h2>
+      <ul class="save-stats">${gradeRows}</ul>
+      <p>${store.earnedCount()} of ${trophies.length} trophies earned overall.</p>
+      <label class="toggle">
+        <input type="checkbox" data-action-check="spoilers"${store.spoilers ? ' checked' : ''}>
+        Hide story spoilers until earned
+      </label>
+    </section>
+    <section class="stage-card">
+      <h2>Move the save</h2>
+      <p class="save-actions">
+        <button type="button" class="btn btn-main" data-action="export">Export progress (.json)</button>
+        <label class="btn btn-quiet file-btn">Import from file<input type="file" id="import-file" accept=".json,application/json" hidden></label>
+        <button type="button" class="btn btn-danger" data-action="reset">Reset everything</button>
+      </p>
+      <label class="note-label" for="import-box">…or paste an exported save here, then press Import pasted</label>
+      <textarea id="import-box" rows="5" placeholder='{"app":"dusk-ledger", …}'></textarea>
+      <p class="save-actions"><button type="button" class="btn" data-action="import-paste">Import pasted</button></p>
+      <p id="save-msg" class="muted" role="status"></p>
+    </section>
+  </div>`;
 }

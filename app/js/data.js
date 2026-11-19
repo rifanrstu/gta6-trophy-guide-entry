@@ -1,179 +1,129 @@
-// Leonida Ledger — data layer.
-// Loads the trophy catalogue that ships with the app, normalises every
-// record into the shape the views expect, and owns the static knowledge
-// the guide is organised around: grade order, kind labels, the four
-// roadmap stages and the confidence badge explanations.
+// data.js — loads the trophy list and answers plain questions about it:
+// grades, kinds, roadmap stages, counters and source lines. No state lives
+// here; store.js owns progress, views.js owns markup.
 
-export const GRADE_SEQUENCE = ["platinum", "gold", "silver", "bronze"];
+export const GRADE_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 
 export const GRADE_LABEL = {
-  platinum: "Platinum",
-  gold: "Gold",
-  silver: "Silver",
-  bronze: "Bronze",
+  platinum: 'Platinum',
+  gold: 'Gold',
+  silver: 'Silver',
+  bronze: 'Bronze',
 };
+
+export const GRADE_FILTERS = [
+  { id: 'all', label: 'All grades' },
+  { id: 'platinum', label: 'Platinum' },
+  { id: 'gold', label: 'Gold' },
+  { id: 'silver', label: 'Silver' },
+  { id: 'bronze', label: 'Bronze' },
+];
+
+// The kind filters the checklist offers. 'missable' and 'counters' are not
+// stored kinds in the data — they are flags (a missable window, a numeric
+// PSN target), and bucketsOf() below folds them in. 'online' is listed
+// because the rules ask for the filter; this list simply has none.
+export const KIND_FILTERS = [
+  { id: 'all', label: 'All kinds' },
+  { id: 'story', label: 'Story' },
+  { id: 'missable', label: 'Missable' },
+  { id: 'collectibles', label: 'Collectibles' },
+  { id: 'activities', label: 'Activities' },
+  { id: 'counters', label: 'Counters' },
+  { id: 'side', label: 'Side work' },
+  { id: 'world', label: 'Open world' },
+  { id: 'online', label: 'Online' },
+];
 
 export const KIND_LABEL = {
-  story: "Story",
-  missable: "Missable",
-  collectibles: "Collectibles",
-  activities: "Activities",
-  counters: "Counters",
-  side: "Side jobs",
-  world: "Open world",
-  online: "Online",
+  story: 'Story',
+  missable: 'Missable',
+  collectibles: 'Collectibles',
+  activities: 'Activities',
+  counters: 'Counter',
+  side: 'Side work',
+  world: 'Open world',
+  online: 'Online',
 };
 
-export const KIND_SEQUENCE = [
-  "story",
-  "missable",
-  "collectibles",
-  "activities",
-  "counters",
-  "side",
-  "world",
-  "online",
-];
-
-// The platinum road, in the order a first run should walk it. Membership
-// is decided by kind (and, for the finale, by the platinum itself), and
-// every stage carries the warning its trophies deserve.
-export const ROAD_STAGES = [
+// The four-stage road to the platinum, in the order a first playthrough
+// should meet them. Stage membership is computed by stageOf(), never stored,
+// so the roadmap can never drift out of step with the checklist.
+export const STAGES = [
   {
-    id: "arrival",
-    title: "Stage 1 — Arrival: walk the story spine",
-    kinds: ["story"],
-    blurb:
-      "Play the campaign in order and let the chapter trophies land as they come. Nothing here needs preparation beyond keeping the spoiler shield on until each one is earned.",
-    watchOut:
-      "Watch out: story trophies stay masked while the spoiler shield is on. That is deliberate — earn first, read afterwards.",
+    n: 1,
+    title: 'Walk the story',
+    blurb: 'Play the campaign start to finish. Twelve trophies sit on the critical path and ask for nothing but progress.',
+    watch: 'One trophy in this whole guide can be missed for good, and its window is in Chapter 1 — read the Missables page before the story carries you past Jason\u2019s house.',
   },
   {
-    id: "rounds",
-    title: "Stage 2 — Rounds: open world, side jobs and activities",
-    kinds: ["world", "side", "activities"],
-    blurb:
-      "Between chapters, clear the free-roam and side content that unlocks as the map opens. These trophies reward exploration, not sequencing.",
-    watchOut:
-      "Watch out: activity venues open gradually. If a place named in a guide is missing, one more story chapter usually unlocks it.",
+    n: 2,
+    title: 'Threads between missions',
+    blurb: 'The side work: jobs and storylines that run alongside the campaign and are easiest to finish while their people are still on the map.',
+    watch: 'Side threads reward finishing what you start — several only count their closing job, so a thread left half-done earns nothing.',
   },
   {
-    id: "tallies",
-    title: "Stage 3 — Tallies: collectibles and long counts",
-    kinds: ["collectibles", "counters"],
-    blurb:
-      "The slow burns. Sweep collectibles district by district and keep the counters ticking over in the ledger so no total ever surprises you at the end.",
-    watchOut:
-      "Watch out: a counter left until the finale turns into a grind. Ten minutes a session from the start beats a whole evening later.",
+    n: 3,
+    title: 'Sweeps and tallies',
+    blurb: 'Collectible sets and the nineteen counted trophies with PlayStation progress targets, worked steadily rather than in one grind.',
+    watch: 'A tally banks when its activity closes out. Quitting mid-run is the classic way to lose the last point of a counter.',
   },
   {
-    id: "finale",
-    title: "Stage 4 — Finale: the missable check and the platinum",
-    kinds: ["missable", "online"],
-    blurb:
-      "Before the final story push, run the missable check below, close any online requirement with your crew, and let the platinum close the book.",
-    watchOut:
-      "Watch out: Positive Mental Attitude is the run's one true missable — a Chapter 1 moment on the balcony at Jason's house. Protect it with a spare save before you begin.",
+    n: 4,
+    title: 'The open-world residue',
+    blurb: 'Free-roam feats and activities with no mission wrapped around them — and, when the other 54 are in, the platinum itself.',
+    watch: 'Save the calm free-roam attempts for last and keep your wanted level down; a chase ruins more attempts than any difficulty spike.',
   },
 ];
 
-export const CONFIDENCE_MEANING = {
-  "List-confirmed":
-    "The name, description and grade match the published PlayStation list. The play advice is our own reading of that description and has not been verified inside the game.",
-  "List + PSN target confirmed":
-    "The list data matches PlayStation's published list and the tracked target is the count PlayStation itself reports for this trophy. Play advice remains our own reading.",
-  "Description + reports":
-    "The list data matches the published list, and the missable warning is drawn from the official description together with community reporting. Treat the timing note as load-bearing.",
-};
-
-const KNOWN_KINDS = new Set(KIND_SEQUENCE);
-const KNOWN_GRADES = new Set(GRADE_SEQUENCE);
-
-function asText(value) {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
+export async function loadTrophies() {
+  const res = await fetch('data/trophies.json');
+  if (!res.ok) throw new Error(`trophies.json answered ${res.status}`);
+  const parsed = await res.json();
+  const list = Array.isArray(parsed) ? parsed : parsed.trophies;
+  if (!Array.isArray(list)) throw new Error('trophies.json holds no trophy array');
+  return list;
 }
 
-function asSourceList(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => asText(entry)).filter(Boolean);
-  }
-  const single = asText(value);
-  return single ? [single] : [];
+export function hasTarget(trophy) {
+  return typeof trophy.target === 'number' && trophy.target > 0;
 }
 
-function asTarget(value) {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.floor(value);
-  }
-  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
-    const parsed = Number(value.trim());
-    return parsed > 0 ? parsed : null;
-  }
-  return null;
+// Every filter bucket a trophy belongs to: its stored kind, plus 'missable'
+// when its window can close, plus 'counters' when PlayStation counts it.
+export function bucketsOf(trophy) {
+  const buckets = new Set();
+  if (trophy.kind) buckets.add(trophy.kind);
+  if (trophy.missable) buckets.add('missable');
+  if (hasTarget(trophy)) buckets.add('counters');
+  return buckets;
 }
 
-export function normaliseTrophy(raw, position) {
-  const kindCandidate = asText(raw.kind).toLowerCase();
-  const gradeCandidate = asText(raw.grade).toLowerCase();
-  const target =
-    asTarget(raw.target) ??
-    asTarget(raw.count) ??
-    asTarget(raw.psnTarget) ??
-    asTarget(raw.progressTarget);
-  const steps = Array.isArray(raw.steps)
-    ? raw.steps.map((step) => asText(step)).filter(Boolean)
-    : [];
-  return {
-    position,
-    name: asText(raw.name),
-    description: asText(raw.description),
-    grade: KNOWN_GRADES.has(gradeCandidate) ? gradeCandidate : "bronze",
-    kind: KNOWN_KINDS.has(kindCandidate) ? kindCandidate : "activities",
-    hidden: raw.hidden === true,
-    missable: raw.missable === true || kindCandidate === "missable",
-    guide: asText(raw.guide),
-    sources: asSourceList(raw.sources ?? raw.source),
-    target,
-    steps,
-    timing: asText(raw.timing),
-    confidence: asText(raw.confidence) || "List-confirmed",
-  };
+export function stageOf(trophy) {
+  if (trophy.grade === 'platinum') return 4;
+  if (trophy.kind === 'story' || trophy.missable) return 1;
+  if (trophy.kind === 'side') return 2;
+  if (trophy.kind === 'collectibles' || hasTarget(trophy)) return 3;
+  return 4;
 }
 
-export async function fetchTrophies() {
-  const response = await fetch("data/trophies.json", { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`trophy data failed to load (${response.status})`);
-  }
-  const payload = await response.json();
-  const rows = Array.isArray(payload) ? payload : payload.trophies;
-  if (!Array.isArray(rows)) {
-    throw new Error("trophy data has no trophies array");
-  }
-  return rows.map((row, index) => normaliseTrophy(row, index));
+export function gradeRank(trophy) {
+  const rank = GRADE_ORDER.indexOf(trophy.grade);
+  return rank === -1 ? GRADE_ORDER.length : rank;
 }
 
-export function stageIndexFor(trophy) {
-  if (trophy.grade === "platinum") return ROAD_STAGES.length - 1;
-  const found = ROAD_STAGES.findIndex((stage) =>
-    stage.kinds.includes(trophy.kind),
-  );
-  return found === -1 ? 1 : found;
+// The sources line for a trophy's guide pane: the data's own sources value
+// when it carries one (a string, or a list to join), otherwise the standing
+// citation for the whole list.
+export function sourcesText(trophy) {
+  const raw = trophy.sources;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (Array.isArray(raw) && raw.length) return raw.filter(Boolean).join(' · ');
+  return 'Exophase, for the official list (name, description, grade) · PSNProfiles, for PSN\u2019s progress targets';
 }
 
-export function trophiesInStage(trophies, stageIndex) {
-  return trophies.filter((trophy) => stageIndexFor(trophy) === stageIndex);
-}
-
-export function catalogueSummary(trophies) {
-  const byGrade = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
-  let hiddenCount = 0;
-  let missableCount = 0;
-  for (const trophy of trophies) {
-    byGrade[trophy.grade] += 1;
-    if (trophy.hidden) hiddenCount += 1;
-    if (trophy.missable) missableCount += 1;
-  }
-  return { total: trophies.length, byGrade, hiddenCount, missableCount };
+export function countByGrade(trophies) {
+  const tally = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
+  for (const t of trophies) if (t.grade in tally) tally[t.grade] += 1;
+  return tally;
 }

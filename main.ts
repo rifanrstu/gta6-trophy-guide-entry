@@ -1,102 +1,56 @@
-// GTA VI Trophy Atlas — hand-in program (v4, Leonida Ledger build).
-//
-// What this file does, in order:
-//   1. Reads the trophy catalogue out of app/data/trophies.json and
-//      refuses to hand anything in unless all 55 trophies carry a
-//      guide, a three-step breakdown, a timing note and a confidence
-//      badge — a thin catalogue should fail here, not at the gate.
-//   2. Copies app/ and screenshots/ into the output directory, in a
-//      fixed sorted order so two runs write identical bytes.
-//   3. Writes dossier.json there with the kit's own library, imported
-//      unchanged from vendor/makefun-frontend.ts, under this bounty’s
-//      caps.
-// Every path is anchored to this file's directory, never to the
-// caller's working directory, and the output folder is created
-// recursively before anything is copied into it.
+// main.ts — the hand-in program for the Dusk Ledger entry (Node 22,
+// standard library only). It proves the trophy data is complete, copies
+// app/ and screenshots/ from beside this file into the output directory,
+// and writes the dossier the judge reads with the vendored library.
+//   MAKEFUN_OUTPUT_DIR=out node main.ts     (outside the grader, out/ is a
+//   stand-in for /output; the grader runs it with /output itself)
 
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { buildDossier } from "./vendor/makefun-frontend.ts";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildDossier } from './vendor/makefun-frontend.ts';
 
-const EXPECTED_TROPHY_COUNT = 55;
-const MINIMUM_STEPS = 3;
+const repoDir = fileURLToPath(new URL('.', import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-const repoRoot = dirname(fileURLToPath(import.meta.url));
-const outputRoot =
-  process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+// ——— Prove the guide's data before handing anything in ———
+// Every one of the 55 trophies must carry a guide, a three-step breakdown,
+// a timing line and a confidence value; a blank anywhere fails loudly here
+// rather than quietly in front of the gate.
+const rawData = JSON.parse(readFileSync(join(repoDir, 'app', 'data', 'trophies.json'), 'utf8'));
+const trophies = Array.isArray(rawData) ? rawData : rawData.trophies;
+if (!Array.isArray(trophies)) throw new Error('app/data/trophies.json holds no trophies array');
+if (trophies.length !== 55) throw new Error(`expected 55 trophies, found ${trophies.length}`);
 
-function fail(message: string): never {
-  throw new Error(`trophy-atlas hand-in: ${message}`);
+const problems: string[] = [];
+for (const trophy of trophies) {
+  const label = typeof trophy?.name === 'string' && trophy.name ? trophy.name : '(unnamed trophy)';
+  if (typeof trophy?.guide !== 'string' || !trophy.guide.trim()) problems.push(`${label}: guide is blank`);
+  const steps = Array.isArray(trophy?.steps) ? trophy.steps.filter((s: unknown) => typeof s === 'string' && s.trim()) : [];
+  if (steps.length < 3) problems.push(`${label}: only ${steps.length} usable steps, needs 3`);
+  if (typeof trophy?.timing !== 'string' || !trophy.timing.trim()) problems.push(`${label}: timing line is blank`);
+  if (typeof trophy?.confidence !== 'string' || !trophy.confidence.trim()) problems.push(`${label}: confidence value is blank`);
+}
+if (problems.length) throw new Error(`trophy data is incomplete:\n  ${problems.slice(0, 8).join('\n  ')}`);
+
+// ——— Copy the entry and write its dossier ———
+mkdirSync(outDir, { recursive: true });
+cpSync(join(repoDir, 'app'), join(outDir, 'app'), { recursive: true });
+mkdirSync(join(outDir, 'screenshots'), { recursive: true });
+if (existsSync(join(repoDir, 'screenshots'))) {
+  cpSync(join(repoDir, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
 }
 
-function readCatalogue(): void {
-  const cataloguePath = join(repoRoot, "app", "data", "trophies.json");
-  if (!existsSync(cataloguePath)) fail("app/data/trophies.json is missing");
-  const parsed = JSON.parse(readFileSync(cataloguePath, "utf8")) as {
-    trophies?: unknown;
-  };
-  const rows = Array.isArray(parsed) ? parsed : parsed.trophies;
-  if (!Array.isArray(rows)) fail("trophies.json holds no trophies array");
-  if (rows.length !== EXPECTED_TROPHY_COUNT) {
-    fail(`expected ${EXPECTED_TROPHY_COUNT} trophies, found ${rows.length}`);
-  }
-  for (const row of rows as Array<Record<string, unknown>>) {
-    const label = typeof row.name === "string" ? row.name : "<unnamed>";
-    if (typeof row.guide !== "string" || row.guide.trim() === "") {
-      fail(`trophy "${label}" has no guide`);
-    }
-    if (!Array.isArray(row.steps) || row.steps.length < MINIMUM_STEPS) {
-      fail(`trophy "${label}" has fewer than ${MINIMUM_STEPS} steps`);
-    }
-    if (typeof row.timing !== "string" || row.timing.trim() === "") {
-      fail(`trophy "${label}" has no timing note`);
-    }
-    if (typeof row.confidence !== "string" || row.confidence.trim() === "") {
-      fail(`trophy "${label}" has no confidence badge`);
-    }
-  }
-}
-
-function copyTree(sourceDir: string, targetDir: string): void {
-  mkdirSync(targetDir, { recursive: true });
-  const entries = readdirSync(sourceDir).sort();
-  for (const entry of entries) {
-    const from = join(sourceDir, entry);
-    const to = join(targetDir, entry);
-    if (statSync(from).isDirectory()) {
-      copyTree(from, to);
-    } else {
-      copyFileSync(from, to);
-    }
-  }
-}
-
-function main(): void {
-  readCatalogue();
-  mkdirSync(outputRoot, { recursive: true });
-  copyTree(join(repoRoot, "app"), join(outputRoot, "app"));
-  copyTree(join(repoRoot, "screenshots"), join(outputRoot, "screenshots"));
-  const dossier = buildDossier(outputRoot, {
+// The caps are the scorer's own (reference/gate.json): the dossier text cap
+// shapes the bytes, the rest refuse up front what the scorer would refuse.
+writeFileSync(
+  join(outDir, 'dossier.json'),
+  buildDossier(outDir, {
     text_max_bytes: 163840,
     screenshots: { max: 4, max_bytes: 262144 },
     app_max_files: 993,
     app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  });
-  writeFileSync(join(outputRoot, "dossier.json"), dossier);
-  const where = relative(process.cwd(), outputRoot) || outputRoot;
-  console.log(
-    `trophy-atlas: handed in app/ + screenshots/ + dossier.json (${dossier.length} bytes) at ${where.split(sep).join("/")}`,
-  );
-}
+  }),
+);
 
-main();
+console.log(`Dusk Ledger handed in: 55 trophies validated, dossier written to ${outDir}`);

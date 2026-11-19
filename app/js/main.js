@@ -1,234 +1,172 @@
-// Leonida Ledger — boot and wiring.
-// Loads the catalogue, restores (or demo-seeds) the saved progress,
-// renders the masthead, tabs and the active view, and translates every
-// click, keystroke and file choice into a store update plus a repaint.
+// main.js — boots the ledger: loads the list, opens the store, paints the
+// current tab and wires every control. Tabs live in the URL hash so the
+// roadmap, missables, planner and save screens are all one address away.
 
-import { fetchTrophies } from "./data.js";
-import {
-  exportProgress,
-  importProgress,
-  isEarned,
-  loadProgress,
-  saveProgress,
-  seedDemoProgress,
-  setCounter,
-  setNote,
-  summaryLine,
-  toggleEarned,
-} from "./store.js";
-import {
-  guideView,
-  headerView,
-  missablesView,
-  navView,
-  plannerView,
-  roadmapView,
-  saveView,
-} from "./views.js";
+import { countByGrade, loadTrophies } from './data.js';
+import { createStore } from './store.js';
+import { checklistHTML, missablesHTML, nextHTML, roadmapHTML, saveHTML } from './views.js';
 
-const VIEW_IDS = ["guide", "roadmap", "missables", "planner", "save"];
+const view = document.getElementById('view');
+const earnedCountEl = document.getElementById('earned-count');
+const earnedBarEl = document.getElementById('earned-bar');
+const gradeLineEl = document.getElementById('grade-line');
 
-const state = {
-  trophies: [],
-  progress: null,
-  view: "guide",
-  search: "",
-  kind: "all",
-  grade: "all",
-  stateFilter: "all",
-  selected: null,
-};
+const ui = { tab: 'checklist', grade: 'all', kind: 'all', query: '', selected: null };
+let trophies = [];
+let store = null;
 
-function viewFromHash() {
-  const raw = window.location.hash.replace(/^#\/?/, "").split("?")[0];
-  return VIEW_IDS.includes(raw) ? raw : "guide";
+function tabFromHash() {
+  const name = (location.hash || '').replace('#/', '');
+  return ['checklist', 'roadmap', 'missables', 'next', 'save'].includes(name) ? name : 'checklist';
 }
 
-function uiState() {
-  return {
-    search: state.search,
-    kind: state.kind,
-    grade: state.grade,
-    state: state.stateFilter,
-    shieldOn: state.progress.shieldOn,
-    selected: state.selected,
-  };
+function paintMasthead() {
+  const earned = store.earnedCount();
+  earnedCountEl.textContent = String(earned);
+  earnedBarEl.style.width = `${Math.round((earned / trophies.length) * 100)}%`;
+  const by = countByGrade(trophies);
+  gradeLineEl.textContent = `${by.platinum} platinum · ${by.gold} gold · ${by.silver} silver · ${by.bronze} bronze`;
 }
 
 function render() {
-  const root = document.getElementById("ledger-root");
-  if (!root) return;
-  const views = {
-    guide: () => guideView(state.trophies, state.progress, uiState()),
-    roadmap: () => roadmapView(state.trophies, state.progress),
-    missables: () => missablesView(state.trophies, state.progress),
-    planner: () => plannerView(state.trophies, state.progress),
-    save: () => saveView(state.trophies, state.progress),
-  };
-  root.innerHTML =
-    headerView(state.trophies, state.progress) +
-    navView(state.view) +
-    `<main class="lx-main" id="view-main">${views[state.view]()}</main>`;
-  restoreFilterFocus();
+  document.querySelectorAll('#tabs .tab').forEach((btn) => {
+    btn.classList.toggle('is-on', btn.dataset.tab === ui.tab);
+  });
+  const ctx = { trophies, store, ui };
+  if (ui.tab === 'roadmap') view.innerHTML = roadmapHTML(ctx);
+  else if (ui.tab === 'missables') view.innerHTML = missablesHTML(ctx);
+  else if (ui.tab === 'next') view.innerHTML = nextHTML(ctx);
+  else if (ui.tab === 'save') view.innerHTML = saveHTML(ctx);
+  else view.innerHTML = checklistHTML(ctx);
+  paintMasthead();
 }
 
-function restoreFilterFocus() {
-  if (state.view !== "guide") return;
-  const searchBox = document.getElementById("filter-search");
-  if (searchBox && document.activeElement?.id === "filter-search-marker") {
-    searchBox.focus();
-    searchBox.setSelectionRange(searchBox.value.length, searchBox.value.length);
-  }
+function go(tab) {
+  ui.tab = tab;
+  const target = `#/${tab}`;
+  if (location.hash !== target) history.replaceState(null, '', target);
+  render();
 }
 
-function findTrophy(name) {
-  return state.trophies.find((trophy) => trophy.name === name) ?? null;
+function selectedTrophy() {
+  return trophies.find((t) => t.name === ui.selected) || trophies[0];
 }
 
-function handleActionClick(event) {
-  const button = event.target.closest("[data-action]");
-  if (!button) return;
-  const action = button.dataset.action;
-  const trophy = button.dataset.name ? findTrophy(button.dataset.name) : null;
-
-  if (action === "select" && trophy) {
-    state.selected = trophy.name;
-    render();
-    return;
-  }
-  if (action === "toggle-earned" && trophy) {
-    if (button.type === "checkbox") return; // the change handler owns it
-    toggleEarned(state.progress, trophy);
-    state.selected = trophy.name;
-    render();
-    return;
-  }
-  if (action === "counter-step" && trophy) {
-    const delta = Number(button.dataset.delta ?? "0");
-    const current = state.progress.counters[trophy.name] ?? 0;
-    setCounter(state.progress, trophy, current + delta);
-    state.selected = trophy.name;
-    render();
-    return;
-  }
-  if (action === "export") {
-    exportProgress(state.progress);
-    flashSaveFeedback("Progress exported as a JSON file.");
-    return;
-  }
-  if (action === "copy-summary") {
-    const line = summaryLine(state.progress, state.trophies);
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(line)
-        .then(() => flashSaveFeedback("Summary copied: " + line))
-        .catch(() => flashSaveFeedback(line));
-    } else {
-      flashSaveFeedback(line);
-    }
-    return;
-  }
-  if (action === "reset") {
-    state.progress.earned = {};
-    state.progress.counters = {};
-    state.progress.notes = {};
-    saveProgress(state.progress);
-    render();
-    flashSaveFeedback("Ledger reset. Nothing is earned, counted or noted now.");
-  }
+function say(message) {
+  const el = document.getElementById('save-msg');
+  if (el) el.textContent = message;
 }
 
-function flashSaveFeedback(message) {
-  const spot = document.getElementById("save-feedback");
-  if (spot) spot.textContent = message;
-}
+document.addEventListener('click', (event) => {
+  const tabBtn = event.target.closest('#tabs .tab');
+  if (tabBtn) {
+    go(tabBtn.dataset.tab);
+    return;
+  }
+  const el = event.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
 
-function handleChange(event) {
-  const target = event.target;
-  if (target.id === "filter-kind") {
-    state.kind = target.value;
+  if (action === 'grade') {
+    ui.grade = el.dataset.value;
     render();
-  } else if (target.id === "filter-grade") {
-    state.grade = target.value;
+  } else if (action === 'select' || action === 'jump') {
+    ui.selected = el.dataset.name;
+    if (action === 'jump') go('checklist');
+    else render();
+  } else if (action === 'toggle-earned') {
+    store.toggleEarned(selectedTrophy().name);
     render();
-  } else if (target.id === "filter-state") {
-    state.stateFilter = target.value;
+  } else if (action === 'count-up' || action === 'count-down') {
+    const t = selectedTrophy();
+    store.setCount(t, store.countOf(t) + (action === 'count-up' ? 1 : -1));
     render();
-  } else if (target.id === "toggle-shield") {
-    state.progress.shieldOn = target.checked;
-    saveProgress(state.progress);
-    render();
-  } else if (target.dataset.action === "toggle-earned") {
-    const trophy = findTrophy(target.dataset.name);
-    if (trophy) {
-      toggleEarned(state.progress, trophy);
-      state.selected = trophy.name;
+  } else if (action === 'export') {
+    const blob = new Blob([store.exportJSON()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'dusk-ledger-progress.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    say('Exported. Keep the file somewhere safe — it is the only copy of this save outside the browser.');
+  } else if (action === 'import-paste') {
+    const box = document.getElementById('import-box');
+    try {
+      store.importJSON(box.value);
       render();
+      say('Imported. The ledger now shows the pasted save.');
+    } catch (err) {
+      say(`That paste would not import: ${err.message}`);
     }
-  } else if (target.id === "import-file") {
-    const file = target.files?.[0];
-    if (!file) return;
-    importProgress(file)
-      .then((clean) => {
-        state.progress = clean;
-        state.view = "save";
-        render();
-        flashSaveFeedback("Progress imported. The ledger now matches the file.");
-      })
-      .catch(() => flashSaveFeedback("That file could not be read as a ledger export."));
+  } else if (action === 'reset') {
+    if (confirm('Clear every tick, counter and note from this ledger?')) {
+      store.reset();
+      render();
+      say('Cleared. A fresh ledger, ready for a fresh run.');
+    }
   }
-}
+});
 
-function handleInput(event) {
-  const target = event.target;
-  if (target.id === "filter-search") {
-    target.id = "filter-search-marker";
-    state.search = target.value;
+document.addEventListener('change', (event) => {
+  const el = event.target;
+  if (el.matches('[data-action-select="kind"]')) {
+    ui.kind = el.value;
     render();
-  } else if (target.id === "note-editor") {
-    const trophy = findTrophy(target.dataset.name);
-    if (trophy) {
-      setNote(state.progress, trophy, target.value);
-    }
+  } else if (el.matches('[data-action-check="spoilers"]')) {
+    store.setSpoilers(el.checked);
+    render();
+  } else if (el.matches('[data-count-input]')) {
+    store.setCount(selectedTrophy(), el.value);
+    render();
+  } else if (el.id === 'import-file' && el.files && el.files[0]) {
+    el.files[0]
+      .text()
+      .then((text) => {
+        store.importJSON(text);
+        render();
+        say('Imported from file. The ledger now shows that save.');
+      })
+      .catch((err) => say(`That file would not import: ${err.message}`));
   }
-}
+});
+
+document.addEventListener('input', (event) => {
+  const el = event.target;
+  if (el.id === 'search-box') {
+    ui.query = el.value;
+    // Rebuild only the list pane so the search box keeps focus and caret.
+    const ctx = { trophies, store, ui };
+    const fresh = document.createElement('div');
+    fresh.innerHTML = checklistHTML(ctx);
+    const newList = fresh.querySelector('.list-pane');
+    const oldList = view.querySelector('.list-pane');
+    if (newList && oldList) oldList.replaceWith(newList);
+    const meta = fresh.querySelector('.list-meta');
+    const oldMeta = view.querySelector('.list-meta');
+    if (meta && oldMeta) oldMeta.replaceWith(meta);
+  } else if (el.matches('[data-note]')) {
+    store.setNote(selectedTrophy().name, el.value);
+  }
+});
+
+window.addEventListener('hashchange', () => {
+  const tab = tabFromHash();
+  if (tab !== ui.tab) go(tab);
+});
 
 async function boot() {
-  const params = new URLSearchParams(window.location.search);
-  state.trophies = await fetchTrophies();
-  const saved = loadProgress();
-  const hasSavedMarks =
-    Object.keys(saved.earned).length > 0 ||
-    Object.keys(saved.counters).length > 0;
-  if (params.has("demo") && !hasSavedMarks) {
-    state.progress = seedDemoProgress(state.trophies);
-  } else {
-    state.progress = saved;
+  try {
+    trophies = await loadTrophies();
+    store = createStore(trophies, location.search);
+    const params = new URLSearchParams(location.search);
+    const openIndex = Number(params.get('open'));
+    if (Number.isInteger(openIndex) && trophies[openIndex]) ui.selected = trophies[openIndex].name;
+    if (!ui.selected && trophies[0]) ui.selected = trophies[0].name;
+    ui.tab = tabFromHash();
+    render();
+  } catch (err) {
+    view.innerHTML = `<p class="loading">The ledger would not open: ${err.message}. Serve this folder over HTTP (node serve.ts in the repository root) rather than opening the file directly.</p>`;
   }
-  const focusName = params.get("focus");
-  if (focusName && findTrophy(focusName)) {
-    state.selected = focusName;
-  } else {
-    const firstOpen = state.trophies.find(
-      (trophy) => trophy.target && !isEarned(state.progress, trophy),
-    );
-    state.selected = (firstOpen ?? state.trophies[0])?.name ?? null;
-  }
-  state.view = viewFromHash();
-  render();
 }
 
-window.addEventListener("hashchange", () => {
-  state.view = viewFromHash();
-  render();
-});
-document.addEventListener("click", handleActionClick);
-document.addEventListener("change", handleChange);
-document.addEventListener("input", handleInput);
-
-boot().catch((error) => {
-  const root = document.getElementById("ledger-root");
-  if (root) {
-    root.innerHTML = `<p class="lx-load-error">The ledger could not open: ${String(error?.message ?? error)}</p>`;
-  }
-});
+boot();
